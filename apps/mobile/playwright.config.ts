@@ -1,11 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
+const port = Number(process.env.PLAYWRIGHT_PORT || 8081);
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 60000,
   expect: { timeout: 15000 },
   fullyParallel: false,
   workers: 1,
-  use: { baseURL: 'http://localhost:8081', trace: 'retain-on-failure' },
+  use: { baseURL: 'http://localhost:' + port, trace: 'retain-on-failure' },
   projects: [
     {
       name: 'desktop',
@@ -15,13 +16,13 @@ export default defineConfig({
     { name: 'safari', use: { ...devices['iPhone 13'], defaultBrowserType: 'webkit' } },
   ],
   webServer: {
-    command: 'npx expo start --web --port 8081',
+    command: 'npx expo start --web --port ' + port,
     env: {
       EXPO_PUBLIC_FIREBASE_PROJECT_ID: 'demo-pocket',
       EXPO_PUBLIC_FIREBASE_API_KEY: 'fake-emulator-api-key',
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 'test-oauth-client.apps.googleusercontent.com',
     },
-    url: 'http://localhost:8081',
+    url: 'http://localhost:' + port,
     reuseExistingServer: !process.env.CI,
     timeout: 180000,
   },

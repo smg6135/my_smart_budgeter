@@ -237,9 +237,21 @@ for key, region in regions.items():
                 "server": "https://kubernetes.default.svc",
                 "namespace": "pocket",
             },
+            "ignoreDifferences": [
+                {
+                    "group": "apps",
+                    "kind": "Deployment",
+                    "name": name,
+                    "jsonPointers": ["/spec/replicas"],
+                }
+                for name in ("api", "litellm")
+            ],
             "syncPolicy": {
                 "automated": {"prune": True, "selfHeal": True},
-                "syncOptions": ["CreateNamespace=true"],
+                "syncOptions": [
+                    "CreateNamespace=true",
+                    "RespectIgnoreDifferences=true",
+                ],
             },
         },
     }

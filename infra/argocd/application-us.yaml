@@ -12,9 +12,21 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: pocket
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    name: api
+    jsonPointers:
+    - /spec/replicas
+  - group: apps
+    kind: Deployment
+    name: litellm
+    jsonPointers:
+    - /spec/replicas
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
     - CreateNamespace=true
+    - RespectIgnoreDifferences=true
