@@ -14,13 +14,16 @@ data:
     \      model: openai/gpt-6-sol\n      api_key: os.environ/OPENAI_API_KEY\nlitellm_settings:\n\
     \  set_verbose: false\n  turn_off_message_logging: true\n  request_timeout: 75\n\
     \  num_retries: 0\ngeneral_settings:\n  master_key: os.environ/LITELLM_MASTER_KEY\n\
-    \  disable_spend_logs: true\n  store_model_in_db: false\n"
+    \  disable_spend_logs: false\n  store_model_in_db: false\n  database_connection_pool_limit:\
+    \ 3\n  store_prompts_in_spend_logs: false\n"
   start.py: "\"\"\"Load mounted credentials without putting secret values in arguments\
-    \ or logs.\"\"\"\n\nimport os\nfrom pathlib import Path\n\nfor name in (\"LITELLM_MASTER_KEY\"\
-    , \"OPENAI_API_KEY\"):\n    filename = os.environ.get(name + \"_FILE\")\n    if\
-    \ filename and Path(filename).exists():\n        os.environ[name] = Path(filename).read_text().strip()\n\
-    \    if name == \"LITELLM_MASTER_KEY\" and not os.environ.get(name):\n       \
-    \ raise RuntimeError(name + \" is not configured\")\nos.environ.setdefault(\"\
-    OPENAI_API_KEY\", \"\")\nos.execvp(\n    \"litellm\",\n    [\n        \"litellm\"\
-    ,\n        \"--config\",\n        \"/etc/litellm/config.yaml\",\n        \"--host\"\
-    ,\n        \"0.0.0.0\",\n        \"--port\",\n        \"4000\",\n    ],\n)\n"
+    \ or logs.\"\"\"\n\nimport os\nfrom pathlib import Path\n\nfor name in (\n   \
+    \ \"LITELLM_MASTER_KEY\",\n    \"OPENAI_API_KEY\",\n    \"DATABASE_URL\",\n  \
+    \  \"LITELLM_SALT_KEY\",\n    \"UI_PASSWORD\",\n):\n    filename = os.environ.get(name\
+    \ + \"_FILE\")\n    if filename and Path(filename).exists():\n        os.environ[name]\
+    \ = Path(filename).read_text().strip()\n    if name == \"LITELLM_MASTER_KEY\"\
+    \ and not os.environ.get(name):\n        raise RuntimeError(name + \" is not configured\"\
+    )\nos.environ.setdefault(\"OPENAI_API_KEY\", \"\")\nos.execvp(\n    \"litellm\"\
+    ,\n    [\n        \"litellm\",\n        \"--config\",\n        \"/etc/litellm/config.yaml\"\
+    ,\n        \"--host\",\n        \"0.0.0.0\",\n        \"--port\",\n        \"\
+    4000\",\n    ],\n)\n"

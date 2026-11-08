@@ -108,6 +108,9 @@ for name, port, replicas, image in [
                     "value": "/var/secrets/litellm-key",
                 },
                 {"name": "OPENAI_API_KEY_FILE", "value": "/var/secrets/openai-key"},
+                {"name": "DATABASE_URL_FILE", "value": "/var/secrets/database-url"},
+                {"name": "LITELLM_SALT_KEY_FILE", "value": "/var/secrets/salt-key"},
+                {"name": "UI_PASSWORD_FILE", "value": "/var/secrets/ui-password"},
                 {"name": "HOME", "value": "/tmp"},
                 {"name": "LITELLM_LOCAL_MODEL_COST_MAP", "value": "True"},
             ],
@@ -162,6 +165,41 @@ for name, port, replicas, image in [
         },
     }
     if name == "litellm":
+        spec["template"]["spec"]["initContainers"] = [
+            {
+                "name": "cloud-sql-proxy",
+                "restartPolicy": "Always",
+                "image": "gcr.io/cloud-sql-connectors/cloud-sql-proxy@sha256:7d156a5c466e31596afd6c8ed134f19c207a297418392fdad2686524ca4e7a3c",
+                "args": [
+                    "--private-ip",
+                    "--port=5432",
+                    "--structured-logs",
+                    "--health-check",
+                    "--http-address=0.0.0.0",
+                    "--http-port=9090",
+                    "$(CLOUD_SQL_INSTANCE)",
+                ],
+                "envFrom": [{"configMapRef": {"name": "ai-config"}}],
+                "resources": {
+                    "requests": {"cpu": "50m", "memory": "64Mi"},
+                    "limits": {"cpu": "500m", "memory": "256Mi"},
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": False,
+                    "readOnlyRootFilesystem": True,
+                    "capabilities": {"drop": ["ALL"]},
+                },
+                "startupProbe": {
+                    "httpGet": {"path": "/readiness", "port": 9090},
+                    "periodSeconds": 5,
+                    "failureThreshold": 60,
+                },
+                "livenessProbe": {
+                    "httpGet": {"path": "/liveness", "port": 9090},
+                    "periodSeconds": 20,
+                },
+            }
+        ]
         content = (root / "services/ai/config.yaml").read_bytes() + (
             root / "services/ai/start.py"
         ).read_bytes()
@@ -271,6 +309,13 @@ metadata = {
 }
 for name in ["api", "litellm"]:
     egress = [dns, public, metadata]
+    if name == "litellm":
+        egress += [
+            {
+                "to": [{"ipBlock": {"cidr": "10.40.0.0/16"}}],
+                "ports": [{"protocol": "TCP", "port": 3307}],
+            }
+        ]
     if name == "api":
         egress += [
             {

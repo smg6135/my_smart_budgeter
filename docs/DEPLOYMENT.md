@@ -168,3 +168,21 @@ For each region:
 Infrastructure validation does not replace these live checks. GCP provisioning, DNS, OAuth consent, native signing and provider credentials remain account-specific.
 
 References: [GKE Gateway policies](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/configure-gateway-resources), [Secret Manager add-on](https://docs.cloud.google.com/secret-manager/docs/secret-manager-managed-csi-component), [LiteLLM Responses API](https://docs.litellm.ai/docs/response_api), [Firebase Auth REST](https://firebase.google.com/docs/reference/rest/auth).
+
+## LiteLLM dashboard
+
+Both regions share a private Cloud SQL Postgres database for usage history. Prompt and response storage is disabled. Provider credentials remain in Secret Manager; model routing stays in Git.
+
+Open a private cluster tunnel:
+
+```bash
+./scripts/litellm-ui.sh us
+```
+
+Visit http://localhost:4000/ui. Username: `admin`. Retrieve the dashboard password locally:
+
+```bash
+./scripts/gcloud.sh secrets versions access latest --secret=pocket-litellm-ui-password --project=normies-main
+```
+
+Use `./scripts/litellm-ui.sh sg 4002` for Singapore at http://localhost:4002/ui. The database is shared, so both show aggregated usage. Only the GCP-authenticated tunnel exposes the dashboard; customer Gateways expose API routes only.

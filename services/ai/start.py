@@ -3,7 +3,13 @@
 import os
 from pathlib import Path
 
-for name in ("LITELLM_MASTER_KEY", "OPENAI_API_KEY"):
+for name in (
+    "LITELLM_MASTER_KEY",
+    "OPENAI_API_KEY",
+    "DATABASE_URL",
+    "LITELLM_SALT_KEY",
+    "UI_PASSWORD",
+):
     filename = os.environ.get(name + "_FILE")
     if filename and Path(filename).exists():
         os.environ[name] = Path(filename).read_text().strip()

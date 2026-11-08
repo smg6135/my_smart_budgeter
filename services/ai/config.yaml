@@ -25,5 +25,7 @@ litellm_settings:
   num_retries: 0
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
-  disable_spend_logs: true
+  disable_spend_logs: false
   store_model_in_db: false
+  database_connection_pool_limit: 3
+  store_prompts_in_spend_logs: false
