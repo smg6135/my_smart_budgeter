@@ -17,6 +17,7 @@ class Settings:
     litellm_key: str
     region: str
     daily_units: int
+    enabled_tasks: frozenset[str]
 
     @classmethod
     def load(cls):
@@ -28,6 +29,11 @@ class Settings:
             secret("LITELLM_MASTER_KEY"),
             os.getenv("SERVICE_REGION", "local"),
             int(os.getenv("AI_DAILY_UNITS", "300")),
+            frozenset(
+                os.getenv(
+                    "AI_ENABLED_TASKS", "ocr-bulk,ocr-single,planning,conversation"
+                ).split(",")
+            ),
         )
         if s.environment not in ("development", "test", "production"):
             raise RuntimeError("Invalid APP_ENV")

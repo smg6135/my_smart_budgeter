@@ -63,6 +63,8 @@ async def rate_limit(request: Request, uid: str, bucket="api", limit=60):
 
 
 async def ai_quota(request: Request, uid: str, task: str):
+    if task not in request.app.state.settings.enabled_tasks:
+        raise HTTPException(503, "This AI service is temporarily unavailable.")
     if not request.state.claims.get("email_verified"):
         raise HTTPException(403, "Verify your email before using AI.")
     await rate_limit(request, uid, "ai", 30)

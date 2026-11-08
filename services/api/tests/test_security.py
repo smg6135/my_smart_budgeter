@@ -126,3 +126,10 @@ def test_production_forbids_emulator(monkeypatch):
 def test_readiness_requires_redis(client):
     app.state.redis.ping.side_effect = RuntimeError()
     assert client.get("/ready").status_code == 503
+
+
+def test_unconfigured_task_does_not_charge_usage(client):
+    app.state.settings.enabled_tasks = frozenset({"ocr-bulk", "ocr-single"})
+    assert client.post("/v1/planner/chat", json=BODY).status_code == 503
+    app.state.usage.transaction.assert_not_called()
+    app.state.client.post.assert_not_called()

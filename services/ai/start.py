@@ -5,10 +5,11 @@ from pathlib import Path
 
 for name in ("LITELLM_MASTER_KEY", "OPENAI_API_KEY"):
     filename = os.environ.get(name + "_FILE")
-    if filename:
+    if filename and Path(filename).exists():
         os.environ[name] = Path(filename).read_text().strip()
-    if not os.environ.get(name):
+    if name == "LITELLM_MASTER_KEY" and not os.environ.get(name):
         raise RuntimeError(name + " is not configured")
+os.environ.setdefault("OPENAI_API_KEY", "")
 os.execvp(
     "litellm",
     [

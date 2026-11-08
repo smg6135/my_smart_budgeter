@@ -29,8 +29,7 @@ metadata:
 spec:
   provider: gke
   parameters:
-    secrets: "- path: litellm-key\n  resourceName: projects/normies-main/secrets/pocket-litellm-key/versions/1\n\
-      - path: openai-key\n  resourceName: projects/normies-main/secrets/pocket-openai-key/versions/1\n"
+    secrets: "- path: litellm-key\n  resourceName: projects/normies-main/secrets/pocket-litellm-key/versions/1\n"
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -60,6 +59,7 @@ data:
   LITELLM_URL: http://litellm:4000
   SERVICE_REGION: asia-southeast1
   AI_DAILY_UNITS: '300'
+  AI_ENABLED_TASKS: ocr-bulk,ocr-single
   CORS_ORIGINS: http://localhost:8081
 ---
 apiVersion: v1

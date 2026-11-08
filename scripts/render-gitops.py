@@ -12,7 +12,9 @@ cfg = json.loads(Path(args.config).read_text())
 project = cfg["project_id"]
 domain = cfg["api_domain"]
 if not all(
-    re.fullmatch(r"[1-9][0-9]*", str(v)) for v in cfg["secret_versions"].values()
+    re.fullmatch(r"[1-9][0-9]*", str(v))
+    for v in cfg["secret_versions"].values()
+    if v is not None
 ):
     raise SystemExit("Pin numeric secret versions")
 if not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", project):
@@ -61,6 +63,7 @@ for key, region in regions.items():
                 "path": filename,
             }
             for secret, filename in secret_files.items()
+            if cfg["secret_versions"].get(secret) is not None
         ]
         obj(
             "SecretProviderClass",
@@ -79,6 +82,11 @@ for key, region in regions.items():
             "LITELLM_URL": "http://litellm:4000",
             "SERVICE_REGION": region,
             "AI_DAILY_UNITS": str(cfg.get("ai_daily_units", 300)),
+            "AI_ENABLED_TASKS": (
+                "ocr-bulk,ocr-single,planning,conversation"
+                if cfg["secret_versions"].get("pocket-openai-key")
+                else "ocr-bulk,ocr-single"
+            ),
             "CORS_ORIGINS": ",".join(cfg["web_origins"]),
         },
     )

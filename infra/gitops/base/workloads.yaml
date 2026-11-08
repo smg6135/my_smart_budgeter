@@ -142,7 +142,7 @@ spec:
       labels:
         app: litellm
       annotations:
-        pocket/config-sha: 00e6c2cb7a423ee391bfde2de8dc7ca361bfb98939fbc5ef3695ba4afc2c197c
+        pocket/config-sha: 66d332894f5ccbd2628f8ef55e39c2cba0a3ab56f831f23a9399474779443e9e
     spec:
       serviceAccountName: ai
       securityContext:

@@ -18,8 +18,9 @@ data:
   start.py: "\"\"\"Load mounted credentials without putting secret values in arguments\
     \ or logs.\"\"\"\n\nimport os\nfrom pathlib import Path\n\nfor name in (\"LITELLM_MASTER_KEY\"\
     , \"OPENAI_API_KEY\"):\n    filename = os.environ.get(name + \"_FILE\")\n    if\
-    \ filename:\n        os.environ[name] = Path(filename).read_text().strip()\n \
-    \   if not os.environ.get(name):\n        raise RuntimeError(name + \" is not\
-    \ configured\")\nos.execvp(\n    \"litellm\",\n    [\n        \"litellm\",\n \
-    \       \"--config\",\n        \"/etc/litellm/config.yaml\",\n        \"--host\"\
+    \ filename and Path(filename).exists():\n        os.environ[name] = Path(filename).read_text().strip()\n\
+    \    if name == \"LITELLM_MASTER_KEY\" and not os.environ.get(name):\n       \
+    \ raise RuntimeError(name + \" is not configured\")\nos.environ.setdefault(\"\
+    OPENAI_API_KEY\", \"\")\nos.execvp(\n    \"litellm\",\n    [\n        \"litellm\"\
+    ,\n        \"--config\",\n        \"/etc/litellm/config.yaml\",\n        \"--host\"\
     ,\n        \"0.0.0.0\",\n        \"--port\",\n        \"4000\",\n    ],\n)\n"

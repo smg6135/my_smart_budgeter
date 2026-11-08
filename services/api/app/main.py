@@ -360,6 +360,7 @@ async def me(request: Request, uid: str = Depends(current_user)):
         "uid": uid,
         "region": request.app.state.settings.region,
         "ai_daily_units": request.app.state.settings.daily_units,
+        "ai_tasks": sorted(request.app.state.settings.enabled_tasks),
     }
 
 
