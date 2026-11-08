@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-if [ -d .tools/google-cloud-sdk/bin ]; then export PATH="$PWD/.tools/google-cloud-sdk/bin:$PATH"; fi
+if [ -d .tools/google-cloud-sdk/bin ]; then export PATH="$PWD/.tools:$PWD/.tools/google-cloud-sdk/bin:$PATH"; fi
 pocket_region_key="${1:?Usage: scripts/bootstrap-argocd.sh us|sg PROJECT_ID}"
 pocket_project="${2:?Project ID required}"
 case "$pocket_region_key" in

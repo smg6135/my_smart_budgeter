@@ -31,9 +31,9 @@ Install the resulting development build on a registered iPhone. The phone's `loc
 
 ## TestFlight
 
-1. Deploy GCP and complete the live checks in [DEPLOYMENT.md](DEPLOYMENT.md).
-2. Confirm the bundle ID in `apps/mobile/app.json`; create the matching App Store Connect app.
-3. Set production EAS variables from `apps/mobile/.env.example`: Firebase configuration, Google web/iOS client IDs, reversed iOS URL scheme, default HTTPS API origin and all two regional origins. **Remove the auth emulator URL.** Production builds check these values.
+1. The US and Singapore APIs are deployed. Production public values are prepared in the ignored `apps/mobile/.env.production`.
+2. Create the App Store Connect app for bundle ID `com.mingonsong.pocketbudget`.
+3. Add the prepared public values in Expo project settings → Environment variables → production. Include Firebase configuration, Google web/iOS client IDs, reversed iOS URL scheme and both HTTPS API origins. Keep `EXPO_PUBLIC_AUTH_EMULATOR_URL` empty, including in local production builds, so the local `.env` cannot enable emulators. [Expo environment setup](https://docs.expo.dev/eas/environment-variables/manage/).
 4. Build and upload:
 
 ```bash
@@ -44,7 +44,7 @@ npx eas-cli@latest build --platform ios --profile production
 npx eas-cli@latest submit --platform ios --profile production --latest
 ```
 
-Use your Apple Developer account when prompted. Let EAS manage signing or select your existing credentials. Optionally set `submit.production.ascAppId` in `eas.json`.
+Use your Apple Developer account when prompted. Let EAS manage signing or select your existing credentials. Optionally set `submit.production.ios.ascAppId` in `eas.json`. No signed build or upload has been made yet.
 
 After processing, open App Store Connect → TestFlight → add the build to an internal test group. Install TestFlight on your phone and accept the invitation. External groups require Beta App Review. Uploading a build does not publish it to the App Store. [Expo submission](https://docs.expo.dev/submit/ios/), [TestFlight distribution](https://docs.expo.dev/submit/testflight/).
 

@@ -10,6 +10,9 @@
   "secret_versions": {
     "pocket-openai-key": "1",
     "pocket-litellm-key": "1",
-    "pocket-redis-password": "1"
+    "pocket-redis-password": "1",
+    "pocket-litellm-database-url": "1",
+    "pocket-litellm-salt-key": "1",
+    "pocket-litellm-ui-password": "1"
   }
 }

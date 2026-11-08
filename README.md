@@ -68,4 +68,4 @@ EXPO_PUBLIC_FIREBASE_PROJECT_ID=demo-pocket EXPO_PUBLIC_FIREBASE_API_KEY=fake-em
 
 With local services running, `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 services/api/.venv/bin/python scripts/smoke-local.py` checks real emulator tokens. `node scripts/smoke-browser.cjs` checks the real frontend/backend flow.
 
-Cloud provisioning and live provider/device tests require configured accounts. See the implementation status for completed checks.
+US and Singapore APIs are deployed and tested. Open the private LiteLLM dashboard with `./scripts/litellm-ui.sh us`, then visit http://localhost:4000/ui. Login: `admin`; password: Secret Manager `pocket-litellm-ui-password`. See [deployment](docs/DEPLOYMENT.md) and [implementation status](docs/IMPLEMENTATION_PLAN.md).

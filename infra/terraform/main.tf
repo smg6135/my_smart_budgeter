@@ -407,3 +407,8 @@ data "google_firebase_apple_app_config" "mobile" {
   project  = var.project_id
   app_id   = google_firebase_apple_app.mobile.app_id
 }
+resource "google_secret_manager_secret_iam_member" "redis_secret" {
+  secret_id = google_secret_manager_secret.platform["pocket-redis-password"].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.redis.email}"
+}
