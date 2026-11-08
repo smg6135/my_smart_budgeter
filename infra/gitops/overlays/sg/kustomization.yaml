@@ -7,7 +7,7 @@ resources:
 images:
 - name: pocket-api
   newName: asia-southeast1-docker.pkg.dev/normies-main/pocket/api
-  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  digest: sha256:392106c8713e4df62f2d145b45818f2a8cbc4d6d9698668f6c60358e8e63d787
 patches:
 - target:
     group: apps
