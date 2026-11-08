@@ -16,7 +16,7 @@ patches:
     name: api
   patch: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\nspec:\n \
     \ template:\n    metadata:\n      annotations:\n        pocket/regional-config-sha:\
-    \ ff7b4cd6321cc9c8bde0209502bc1eba3ddd664903902777d4a8753ecebb2851\n"
+    \ 8e7e9fed39ab5ee6b11c7e0331053e3841e1ccb24811bd63367a0d14fe41aa08\n"
 - target:
     group: apps
     version: v1
@@ -24,7 +24,7 @@ patches:
     name: litellm
   patch: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: litellm\nspec:\n\
     \  template:\n    metadata:\n      annotations:\n        pocket/regional-config-sha:\
-    \ ff7b4cd6321cc9c8bde0209502bc1eba3ddd664903902777d4a8753ecebb2851\n"
+    \ 8e7e9fed39ab5ee6b11c7e0331053e3841e1ccb24811bd63367a0d14fe41aa08\n"
 - target:
     group: apps
     version: v1
@@ -32,4 +32,4 @@ patches:
     name: redis
   patch: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: redis\nspec:\n\
     \  template:\n    metadata:\n      annotations:\n        pocket/regional-config-sha:\
-    \ ff7b4cd6321cc9c8bde0209502bc1eba3ddd664903902777d4a8753ecebb2851\n"
+    \ 8e7e9fed39ab5ee6b11c7e0331053e3841e1ccb24811bd63367a0d14fe41aa08\n"

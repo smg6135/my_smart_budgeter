@@ -142,7 +142,7 @@ spec:
       labels:
         app: litellm
       annotations:
-        pocket/config-sha: 66d332894f5ccbd2628f8ef55e39c2cba0a3ab56f831f23a9399474779443e9e
+        pocket/config-sha: c63204b52c93d1798eb7cc7e8c33d69e4565b751f8a6a1f5040ccb5dcce6c095
     spec:
       serviceAccountName: ai
       securityContext:
@@ -191,6 +191,12 @@ spec:
           value: /var/secrets/litellm-key
         - name: OPENAI_API_KEY_FILE
           value: /var/secrets/openai-key
+        - name: DATABASE_URL_FILE
+          value: /var/secrets/database-url
+        - name: LITELLM_SALT_KEY_FILE
+          value: /var/secrets/salt-key
+        - name: UI_PASSWORD_FILE
+          value: /var/secrets/ui-password
         - name: HOME
           value: /tmp
         - name: LITELLM_LOCAL_MODEL_COST_MAP
@@ -224,6 +230,45 @@ spec:
         configMap:
           name: litellm-config
       terminationGracePeriodSeconds: 100
+      initContainers:
+      - name: cloud-sql-proxy
+        restartPolicy: Always
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy@sha256:7d156a5c466e31596afd6c8ed134f19c207a297418392fdad2686524ca4e7a3c
+        args:
+        - --private-ip
+        - --port=5432
+        - --structured-logs
+        - --health-check
+        - --http-address=0.0.0.0
+        - --http-port=9090
+        - $(CLOUD_SQL_INSTANCE)
+        envFrom:
+        - configMapRef:
+            name: ai-config
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        startupProbe:
+          httpGet:
+            path: /readiness
+            port: 9090
+          periodSeconds: 5
+          failureThreshold: 60
+        livenessProbe:
+          httpGet:
+            path: /liveness
+            port: 9090
+          periodSeconds: 20
 ---
 apiVersion: v1
 kind: Service
@@ -517,3 +562,9 @@ spec:
     ports:
     - protocol: TCP
       port: 80
+  - to:
+    - ipBlock:
+        cidr: 10.40.0.0/16
+    ports:
+    - protocol: TCP
+      port: 3307

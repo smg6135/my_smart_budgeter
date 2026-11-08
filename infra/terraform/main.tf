@@ -105,7 +105,7 @@ resource "google_artifact_registry_repository" "images" {
   depends_on    = [google_project_service.api]
 }
 resource "google_secret_manager_secret" "platform" {
-  for_each  = toset(["pocket-openai-key", "pocket-litellm-key", "pocket-redis-password"])
+  for_each  = toset(["pocket-openai-key", "pocket-litellm-key", "pocket-redis-password", "pocket-litellm-database-url", "pocket-litellm-salt-key", "pocket-litellm-ui-password"])
   secret_id = each.key
   replication {
     auto {
@@ -115,7 +115,7 @@ resource "google_secret_manager_secret" "platform" {
 }
 # Provider keys are seeded outside Terraform, so they never enter Terraform input/state.
 resource "random_password" "internal" {
-  for_each = toset(["pocket-litellm-key", "pocket-redis-password"])
+  for_each = toset(["pocket-litellm-key", "pocket-redis-password", "pocket-litellm-salt-key", "pocket-litellm-ui-password"])
   length   = 48
   special  = false
 }
@@ -168,7 +168,7 @@ resource "google_secret_manager_secret_iam_member" "api_secrets" {
   member    = "serviceAccount:${google_service_account.api.email}"
 }
 resource "google_secret_manager_secret_iam_member" "ai_secrets" {
-  for_each  = toset(["pocket-litellm-key", "pocket-openai-key"])
+  for_each  = toset(["pocket-litellm-key", "pocket-openai-key", "pocket-litellm-database-url", "pocket-litellm-salt-key", "pocket-litellm-ui-password"])
   secret_id = google_secret_manager_secret.platform[each.key].id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.ai.email}"
@@ -365,6 +365,9 @@ locals {
     api_redis   = { account = "api", secret = "pocket-redis-password" }
     ai_litellm  = { account = "ai", secret = "pocket-litellm-key" }
     ai_openai   = { account = "ai", secret = "pocket-openai-key" }
+    ai_database = { account = "ai", secret = "pocket-litellm-database-url" }
+    ai_salt     = { account = "ai", secret = "pocket-litellm-salt-key" }
+    ai_ui       = { account = "ai", secret = "pocket-litellm-ui-password" }
     redis       = { account = "redis", secret = "pocket-redis-password" }
   }
 }

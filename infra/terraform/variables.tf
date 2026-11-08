@@ -56,7 +56,7 @@ locals {
       region = "asia-southeast1", index = 30
     }
   }
-  apis = toset(["container.googleapis.com", "compute.googleapis.com", "artifactregistry.googleapis.com", "secretmanager.googleapis.com", "iam.googleapis.com", "iamcredentials.googleapis.com", "sts.googleapis.com", "identitytoolkit.googleapis.com", "firebase.googleapis.com", "firestore.googleapis.com", "aiplatform.googleapis.com", "dns.googleapis.com", "firebaserules.googleapis.com"])
+  apis = toset(["container.googleapis.com", "compute.googleapis.com", "artifactregistry.googleapis.com", "secretmanager.googleapis.com", "iam.googleapis.com", "iamcredentials.googleapis.com", "sts.googleapis.com", "identitytoolkit.googleapis.com", "firebase.googleapis.com", "firestore.googleapis.com", "aiplatform.googleapis.com", "dns.googleapis.com", "firebaserules.googleapis.com", "sqladmin.googleapis.com", "servicenetworking.googleapis.com"])
 }
 
 variable "dns_zone_name" {

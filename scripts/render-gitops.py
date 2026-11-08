@@ -41,7 +41,13 @@ for key, region in regions.items():
             "pocket-litellm-key": "litellm-key",
             "pocket-redis-password": "redis-password",
         },
-        "ai": {"pocket-litellm-key": "litellm-key", "pocket-openai-key": "openai-key"},
+        "ai": {
+            "pocket-litellm-key": "litellm-key",
+            "pocket-openai-key": "openai-key",
+            "pocket-litellm-database-url": "database-url",
+            "pocket-litellm-salt-key": "salt-key",
+            "pocket-litellm-ui-password": "ui-password",
+        },
         "redis": {"pocket-redis-password": "redis-password"},
     }.items():
         docs.append(
@@ -96,6 +102,8 @@ for key, region in regions.items():
         data={
             "GOOGLE_CLOUD_PROJECT": project,
             "VERTEX_LOCATION": cfg.get("vertex_location", "global"),
+            "CLOUD_SQL_INSTANCE": project + ":us-central1:pocket-litellm",
+            "UI_USERNAME": "admin",
         },
     )
     host = domain if key == "us" else f"{key}.{domain}"
