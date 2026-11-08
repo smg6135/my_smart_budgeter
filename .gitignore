@@ -117,3 +117,28 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+# Local app and backend
+node_modules/
+.expo/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/
+*.tsbuildinfo
+.DS_Store
+!package-lock.json
+
+# Tooling and cloud state
+.tools/
+.terraform/
+*.tfstate*
+*.tfplan
+terraform.tfvars
+gha-creds-*.json
+*.local.yaml
+infra/deployment.json

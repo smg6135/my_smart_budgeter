@@ -1,0 +1,56 @@
+# Local-only emulators. Production uses GKE + Identity Platform + Secret Manager.
+name: pocket-budget-dev
+services:
+  emulators:
+    build: ./services/emulators
+    volumes: [emulator-data:/data]
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://127.0.0.1:9099/'),fetch('http://127.0.0.1:8080/')]).then(()=>process.exit(0)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    ports: ["${POCKET_BIND_ADDRESS:-127.0.0.1}:9099:9099", "127.0.0.1:8080:8080", "127.0.0.1:4001:4001"]
+  redis:
+    image: redis:7.4.7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  litellm:
+    image: ghcr.io/berriai/litellm@sha256:d8b4ac356743d647a13bb93f45b941fcd5f5354122cfd205948a1b192790389d
+    command: ["--config", "/etc/litellm/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: sk-local-development-only-master-key
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-demo-pocket}
+      VERTEX_LOCATION: global
+      GOOGLE_APPLICATION_CREDENTIALS: /var/gcp/application_default_credentials.json
+    volumes:
+      - ./services/ai/config.yaml:/etc/litellm/config.yaml:ro
+      - ${POCKET_ADC_DIR:-./.tools/empty-gcp}:/var/gcp:ro
+    # No host port. Only the API can call the AI proxy.
+  api:
+    build: ./services/api
+    ports: ["${POCKET_BIND_ADDRESS:-127.0.0.1}:8000:8000"]
+    depends_on:
+      emulators: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      litellm: {condition: service_started}
+    environment:
+      APP_ENV: development
+      GOOGLE_CLOUD_PROJECT: demo-pocket
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      REDIS_URL: redis://redis:6379/0
+      LITELLM_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: sk-local-development-only-master-key
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081}
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  emulator-data:

@@ -1,0 +1,15 @@
+{
+  "project_id": "replace-project",
+  "api_domain": "backend.normiesai.com",
+  "github_repository": "smg6135/my_smart_budgeter",
+  "web_origins": [
+    "https://budget.example.com"
+  ],
+  "ai_daily_units": 300,
+  "vertex_location": "global",
+  "secret_versions": {
+    "pocket-openai-key": "1",
+    "pocket-litellm-key": "1",
+    "pocket-redis-password": "1"
+  }
+}

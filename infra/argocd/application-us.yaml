@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pocket-us
+  namespace: argocd
+spec:
+  project: pocket
+  source:
+    repoURL: https://github.com/smg6135/my_smart_budgeter.git
+    targetRevision: main
+    path: infra/gitops/overlays/us
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pocket
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

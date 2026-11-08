@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+data:
+  config.yaml: "# Operator-owned routes. Customers can select aliases, never provider\
+    \ models or keys.\nmodel_list:\n  - model_name: ocr-bulk\n    litellm_params:\n\
+    \      model: vertex_ai/gemini-3.5-flash-lite\n      vertex_project: os.environ/GOOGLE_CLOUD_PROJECT\n\
+    \      vertex_location: os.environ/VERTEX_LOCATION\n  - model_name: ocr-single\n\
+    \    litellm_params:\n      model: vertex_ai/gemini-3.8-flash\n      vertex_project:\
+    \ os.environ/GOOGLE_CLOUD_PROJECT\n      vertex_location: os.environ/VERTEX_LOCATION\n\
+    \  - model_name: planning\n    litellm_params:\n      model: openai/gpt-6-luna\n\
+    \      api_key: os.environ/OPENAI_API_KEY\n  - model_name: conversation\n    litellm_params:\n\
+    \      model: openai/gpt-6-sol\n      api_key: os.environ/OPENAI_API_KEY\nlitellm_settings:\n\
+    \  set_verbose: false\n  turn_off_message_logging: true\n  request_timeout: 75\n\
+    \  num_retries: 0\ngeneral_settings:\n  master_key: os.environ/LITELLM_MASTER_KEY\n\
+    \  disable_spend_logs: true\n  store_model_in_db: false\n"
+  start.py: "\"\"\"Load mounted credentials without putting secret values in arguments\
+    \ or logs.\"\"\"\n\nimport os\nfrom pathlib import Path\n\nfor name in (\"LITELLM_MASTER_KEY\"\
+    , \"OPENAI_API_KEY\"):\n    filename = os.environ.get(name + \"_FILE\")\n    if\
+    \ filename:\n        os.environ[name] = Path(filename).read_text().strip()\n \
+    \   if not os.environ.get(name):\n        raise RuntimeError(name + \" is not\
+    \ configured\")\nos.execvp(\n    \"litellm\",\n    [\n        \"litellm\",\n \
+    \       \"--config\",\n        \"/etc/litellm/config.yaml\",\n        \"--host\"\
+    ,\n        \"0.0.0.0\",\n        \"--port\",\n        \"4000\",\n    ],\n)\n"

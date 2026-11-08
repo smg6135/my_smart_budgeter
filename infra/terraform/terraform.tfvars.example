@@ -1,0 +1,8 @@
+project_id = "YOUR_GCP_PROJECT"
+api_domain = "backend.normiesai.com"
+github_repository = "smg6135/my_smart_budgeter"
+github_owner_id = "65800143"
+admin_cidrs = ["YOUR_OPERATOR_IP/32"]
+web_origins = [] # Native clients do not need CORS; add your HTTPS web frontend origin when available.
+google_oauth_client_id = "" # Add the web client ID after seeding its client secret.
+# First create pocket-google-oauth-secret and add the OAuth client secret in Secret Manager.

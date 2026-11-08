@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api
+  annotations:
+    iam.gke.io/gcp-service-account: pocket-api@normies-main.iam.gserviceaccount.com
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: api-gke
+spec:
+  provider: gke
+  parameters:
+    secrets: "- path: litellm-key\n  resourceName: projects/normies-main/secrets/pocket-litellm-key/versions/1\n\
+      - path: redis-password\n  resourceName: projects/normies-main/secrets/pocket-redis-password/versions/1\n"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai
+  annotations:
+    iam.gke.io/gcp-service-account: pocket-ai@normies-main.iam.gserviceaccount.com
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: ai-gke
+spec:
+  provider: gke
+  parameters:
+    secrets: "- path: litellm-key\n  resourceName: projects/normies-main/secrets/pocket-litellm-key/versions/1\n\
+      - path: openai-key\n  resourceName: projects/normies-main/secrets/pocket-openai-key/versions/1\n"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis
+  annotations:
+    iam.gke.io/gcp-service-account: pocket-redis@normies-main.iam.gserviceaccount.com
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: redis-gke
+spec:
+  provider: gke
+  parameters:
+    secrets: "- path: redis-password\n  resourceName: projects/normies-main/secrets/pocket-redis-password/versions/1\n"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+data:
+  APP_ENV: production
+  GOOGLE_CLOUD_PROJECT: normies-main
+  FIRESTORE_DATABASE: pocket-usage
+  REDIS_URL: redis://redis:6379/0
+  LITELLM_URL: http://litellm:4000
+  SERVICE_REGION: us-central1
+  AI_DAILY_UNITS: '300'
+  CORS_ORIGINS: http://localhost:8081
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-config
+data:
+  GOOGLE_CLOUD_PROJECT: normies-main
+  VERTEX_LOCATION: global
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: api
+spec:
+  gatewayClassName: gke-l7-global-external-managed
+  addresses:
+  - type: NamedAddress
+    value: pocket-us-gateway
+  listeners:
+  - name: https
+    protocol: HTTPS
+    port: 443
+    hostname: backend.normiesai.com
+    tls:
+      mode: Terminate
+      options:
+        networking.gke.io/pre-shared-certs: pocket-us-tls
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api
+spec:
+  parentRefs:
+  - name: api
+    sectionName: https
+  hostnames:
+  - backend.normiesai.com
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1/
+    - path:
+        type: Exact
+        value: /health
+    backendRefs:
+    - name: api
+      port: 8000
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: api
+spec:
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: 8000
+        requestPath: /health
+  targetRef:
+    group: ''
+    kind: Service
+    name: api
+---
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: api
+spec:
+  default:
+    securityPolicy: pocket-api-edge
+    timeoutSec: 120
+    logging:
+      enabled: false
+  targetRef:
+    group: ''
+    kind: Service
+    name: api

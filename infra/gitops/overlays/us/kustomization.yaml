@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pocket
+resources:
+- ../../base
+- regional.yaml
+images:
+- name: pocket-api
+  newName: us-central1-docker.pkg.dev/normies-main/pocket/api
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+patches:
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: api
+  patch: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\nspec:\n \
+    \ template:\n    metadata:\n      annotations:\n        pocket/regional-config-sha:\
+    \ 43cbe7b15aa866810e54a4d82ba594e6b3d3ddaa91a437c1737cd8f7a6900f87\n"
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: litellm
+  patch: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: litellm\nspec:\n\
+    \  template:\n    metadata:\n      annotations:\n        pocket/regional-config-sha:\
+    \ 43cbe7b15aa866810e54a4d82ba594e6b3d3ddaa91a437c1737cd8f7a6900f87\n"
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: redis
+  patch: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: redis\nspec:\n\
+    \  template:\n    metadata:\n      annotations:\n        pocket/regional-config-sha:\
+    \ 43cbe7b15aa866810e54a4d82ba594e6b3d3ddaa91a437c1737cd8f7a6900f87\n"

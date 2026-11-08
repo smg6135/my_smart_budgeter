@@ -1,0 +1,60 @@
+name: Publish API release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: api-production-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.34.2'
+      - name: Verify API and manifests
+        run: |
+          pip install -r services/api/requirements-dev.txt
+          python -m pytest -q services/api/tests
+          python scripts/validate-platform.py
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and publish regional immutable images
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: python scripts/publish-images.py
+      - name: Open GitOps release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/update-image.py
+          branch="release/api-${GITHUB_RUN_ID}"
+          git switch -c "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add infra/gitops/overlays
+          git commit -m "Release API ${GITHUB_SHA:0:7}"
+          git push origin "$branch"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          Path('/tmp/release.md').write_text('Deploy the tested API image built from '+os.environ['GITHUB_SHA']+'.\n\nArgo CD syncs both regions after merge. GitHub CI has no Kubernetes deployment permission.\n')
+          PY
+          gh pr create --base main --head "$branch" --title "Release API ${GITHUB_SHA:0:7}" --body-file /tmp/release.md
+          gh workflow run ci.yml --ref "$branch"

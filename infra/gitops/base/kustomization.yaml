@@ -1,0 +1,3 @@
+resources:
+  - workloads.yaml
+  - litellm-config.yaml
