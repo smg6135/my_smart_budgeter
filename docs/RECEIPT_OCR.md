@@ -10,6 +10,8 @@ The native module is in `apps/mobile/modules/pocket-receipt-ocr`. It reads local
 
 The receipt card shows **On-device** and lets users inspect recognized text. Missing amount/currency/date values stay blank in review. Failed scans allow manual entry. No raw text is added to the saved ledger; files and recognized text stay in the transient scan queue, which clears on sign-out. Picker cache files follow the OS/Expo cache lifecycle.
 
+Budget-currency expenses can be saved offline. Foreign expenses still require a fresh cached exchange rate or a rate entered manually.
+
 Cloud OCR is optional on iOS: tap **Use cloud OCR**, then confirm the upload. Failures and unsupported files never trigger automatic uploads. PDFs currently need this explicit cloud path or manual entry. Missing native modules in an older build show an install-new-build message and preserve the cloud option.
 
 ## Build and test
@@ -35,6 +37,8 @@ On an iPhone:
 5. Restore connectivity and confirm cloud OCR for one receipt. Verify its **Cloud** label and normal quota/auth behavior.
 
 Real-device validation and a signed TestFlight build remain separate from the unsigned CI build.
+
+Verified implementation: 35 TypeScript tests, 63 browser checks, three real Vision tests and an unsigned simulator build of the full app/Expo bridge pass. [iOS build run](https://github.com/smg6135/my_smart_budgeter/actions/runs/43726488387). This does not validate camera/file-picker interaction on a physical iPhone.
 
 ## Android and web
 
