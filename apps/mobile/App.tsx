@@ -219,7 +219,11 @@ function AppContent({ session }: { session: Session }) {
     t = trajectory(s),
     fmt = (n: number) => displayAmount(n, s.currency, s.displayCurrency || s.currency, s.fx);
   const budgetMoney = (n: number) => money(n, s.currency, true);
-  const foreignEntry = !!form && form.type === 'entry' && form.currency !== s.currency;
+  const foreignEntry =
+    !!form &&
+    form.type === 'entry' &&
+    supportedCurrency(form.currency) &&
+    form.currency !== s.currency;
   const autoRate = form ? rateFor(s.fx, s.currency, form.currency) : undefined;
   const selectedRate = form?.exchangeRate.trim()
     ? Number(form.exchangeRate)
@@ -336,17 +340,16 @@ function AppContent({ session }: { session: Session }) {
       }
       if (f.receiptId) {
         const scanned = receipts.jobs.find((job) => job.id === f.receiptId)?.result;
-        if (scanned)
-          receipts.patch(f.receiptId, {
-            result: {
-              ...scanned,
-              merchant: f.title.trim(),
-              amount: Number(f.amount),
-              currency: f.currency,
-              date: f.date,
-              category: f.category,
-            },
-          });
+        receipts.patch(f.receiptId, {
+          result: {
+            notes: scanned?.notes || '',
+            merchant: f.title.trim(),
+            amount: Number(f.amount),
+            currency: f.currency,
+            date: f.date,
+            category: f.category,
+          },
+        });
         receipts.markSaved([f.receiptId]);
       }
       setForm(null);
@@ -415,13 +418,21 @@ function AppContent({ session }: { session: Session }) {
   }
   function reviewReceipt(jobId: string) {
     const job = receipts.jobs.find((j) => j.id === jobId);
-    if (!job?.result || job.status !== 'ready') return;
-    const r = job.result;
+    if (!job || (job.status !== 'ready' && !(receipts.deviceOcr && job.status === 'error'))) return;
+    const r = job.result || {
+      merchant: '',
+      amount: 0,
+      currency: '',
+      date: '',
+      category: 'Other',
+      notes: 'Enter receipt details manually.',
+    };
     setScanNote(r.notes);
     open('entry', {
       receiptId: jobId,
       title: r.merchant,
       amount: (() => {
+        if (r.amount <= 0) return '';
         try {
           parseAmount(String(r.amount), r.currency);
           return r.amount.toFixed(decimals(r.currency));

@@ -50,6 +50,8 @@ After processing, open App Store Connect → TestFlight → add the build to an 
 
 ## Device checks
 
+The iOS receipt scanner now includes a local Apple Vision module. Build a new native binary with the commands above; an older build or JavaScript-only update cannot add it. Test image scans in airplane mode, incomplete-field review, batch processing, and the explicit cloud-upload confirmation. PDFs still need cloud OCR or manual entry. [OCR checks](RECEIPT_OCR.md).
+
 - Signup, verification, Google login, refresh, sign-out and account separation.
 - Expense CRUD, goals, currency conversion and persistence after reopening.
 - Camera, multi-file upload, PDF, retry and receipt review.

@@ -156,6 +156,38 @@ test('HEIC and HEIF files enter the batch with their correct MIME types', async 
   expect(mimes.sort()).toEqual(['image/heic', 'image/heif']);
   expect(await textProblems(page)).toEqual([]);
 });
+test('incomplete receipt fields stay blank and can be reviewed without inventing a currency or date', async ({
+  page,
+}) => {
+  // Inject a local OCR draft through the mock to exercise the shared review UI.
+  await page.route('**/v1/receipts/scan', (route) =>
+    route.fulfill({
+      json: {
+        merchant: 'Cafe',
+        amount: 0,
+        currency: '',
+        date: '',
+        category: 'Other',
+        notes: 'Review total, currency, date.',
+      },
+    }),
+  );
+  const promise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Upload receipts', exact: true }).click();
+  await (await promise).setFiles(image('incomplete.png'));
+  await page.getByRole('button', { name: 'Process receipts (1)', exact: true }).click();
+  await expect(page.getByText('Review amount / currency', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Review incomplete.png', exact: true }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Date (YYYY-MM-DD)', { exact: true })).toHaveValue('');
+  await expect(page.getByText('Currency:', { exact: true })).toBeVisible();
+  await page.getByLabel('Amount', { exact: true }).fill('5.00');
+  await page.getByLabel('Date (YYYY-MM-DD)', { exact: true }).fill('2026-11-08');
+  await page.getByRole('button', { name: 'Entry currency SGD', exact: true }).click();
+  await expect(page.getByText('Currency: SGD', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save entry', exact: true }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+});
 test('Plan includes budget controls and goals; old goal URL redirects', async ({ page }) => {
   await page.goto('/goals');
   await expect(page).toHaveURL(/\/plan$/);

@@ -5,6 +5,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
 import { request, ScanResult } from '../api';
 import { id, State } from '../finance';
+import { recognizeReceipt, deviceOcrAvailable } from '../lib/native-receipt-ocr';
+import { processReceipt, type ReceiptEngine } from '../receipt-processor';
 import {
   ReceiptFile,
   ReceiptJob,
@@ -92,10 +94,15 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
       picking.current = false;
     }
   }
-  async function process(jobId?: string) {
+  async function process(
+    jobId?: string,
+    engine: ReceiptEngine = Platform.OS === 'ios' ? 'device' : 'cloud',
+  ) {
     if (active.current || !state) return;
     const pending = jobs.filter((j) =>
-      jobId ? j.id === jobId && j.status === 'error' : j.status === 'pending',
+      jobId
+        ? j.id === jobId && ['pending', 'error', 'ready'].includes(j.status)
+        : j.status === 'pending',
     );
     if (!pending.length) return;
     const epoch = ++generation.current;
@@ -105,17 +112,24 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
       if (!mounted.current || generation.current !== epoch) return;
       patch(job.id, { status: 'processing', error: undefined });
       try {
-        const data = await fileData(job);
-        const result = await request<ScanResult>(state, '/v1/receipts/scan', {
-          data,
-          mime: job.mime,
-          mode: pending.length > 1 ? 'bulk' : 'single',
+        const output = await processReceipt(job, engine, {
+          recognize: recognizeReceipt,
+          cloud: async (file) => {
+            const data = await fileData(file);
+            if (!mounted.current || generation.current !== epoch)
+              throw new Error('Scan cancelled.');
+            return request<ScanResult>(state, '/v1/receipts/scan', {
+              data,
+              mime: file.mime,
+              mode: pending.length > 1 ? 'bulk' : 'single',
+            });
+          },
         });
         if (mounted.current && generation.current === epoch)
-          patch(job.id, { status: 'ready', result, reviewError: undefined });
+          patch(job.id, { status: 'ready', ...output, reviewError: undefined });
       } catch (e) {
         if (mounted.current && generation.current === epoch)
-          patch(job.id, { status: 'error', error: message(e) });
+          patch(job.id, { status: job.result ? 'ready' : 'error', error: message(e) });
       }
     });
     if (generation.current === epoch) {
@@ -125,6 +139,8 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
   }
   return {
     jobs,
+    deviceOcr: Platform.OS === 'ios',
+    deviceOcrAvailable,
     processing,
     choose,
     process,
@@ -132,7 +148,9 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
     markSaved: (ids: string[]) =>
       setJobs((old) =>
         old.map((j) =>
-          ids.includes(j.id) ? { ...j, status: 'saved' as const, reviewError: undefined } : j,
+          ids.includes(j.id)
+            ? { ...j, status: 'saved' as const, error: undefined, reviewError: undefined }
+            : j,
         ),
       ),
     remove: (jobId: string) => {

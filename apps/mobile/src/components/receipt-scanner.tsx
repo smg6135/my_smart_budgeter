@@ -1,6 +1,8 @@
-import { Platform, Text, View } from 'react-native';
+import { Alert, Platform, Text, View } from 'react-native';
+import { useState } from 'react';
 import { Button, C, Card, styles as u, Pill } from './ui';
 import { money } from '../finance';
+import { supportedCurrency } from '../currency';
 import type { useReceipts } from '../hooks/use-receipts';
 type Batch = ReturnType<typeof useReceipts>;
 export function ReceiptScanner({
@@ -12,6 +14,12 @@ export function ReceiptScanner({
   review: (id: string) => void;
   saveAll: () => void;
 }) {
+  const [showText, setShowText] = useState<Record<string, boolean>>({});
+  const cloudScan = (id: string) =>
+    Alert.alert('Cloud OCR', 'Upload this receipt for cloud OCR?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Upload', onPress: () => void batch.process(id, 'cloud') },
+    ]);
   const ready = batch.jobs.filter((j) => j.status === 'ready'),
     pending = batch.jobs.filter((j) => j.status === 'pending');
   const completed = batch.jobs.filter((j) => !['pending', 'processing'].includes(j.status)).length;
@@ -63,7 +71,14 @@ export function ReceiptScanner({
           </Button>
         </View>
       )}
-      <Text style={u.body}>Cloud OCR · Review before saving.</Text>
+      <Text style={u.body}>
+        {batch.deviceOcr
+          ? 'On-device OCR · Review before saving.'
+          : 'Cloud OCR · Review before saving.'}
+      </Text>
+      {batch.deviceOcr && !batch.deviceOcrAvailable && (
+        <Text style={u.body}>Install a new iOS build for on-device OCR.</Text>
+      )}
       {batch.jobs.map((job) => (
         <View
           key={job.id}
@@ -92,20 +107,30 @@ export function ReceiptScanner({
           </View>
           {job.result && (
             <>
-              <Text style={u.body}>{job.result.merchant}</Text>
+              <Text style={u.body}>{job.result.merchant || 'Merchant needed'}</Text>
               <Text style={u.body}>
-                {money(
-                  Math.round(
-                    job.result.amount *
-                      (['JPY', 'KRW', 'VND'].includes(job.result.currency) ? 1 : 100),
-                  ),
-                  job.result.currency,
-                  true,
-                )}{' '}
-                · {job.result.date}
+                {job.result.amount > 0 && supportedCurrency(job.result.currency)
+                  ? money(
+                      Math.round(
+                        job.result.amount *
+                          (['JPY', 'KRW', 'VND'].includes(job.result.currency) ? 1 : 100),
+                      ),
+                      job.result.currency,
+                      true,
+                    )
+                  : 'Review amount / currency'}{' '}
+                · {job.result.date || 'Date needed'}
               </Text>
+              {!!job.engine && (
+                <Text style={u.body}>{job.engine === 'device' ? 'On-device' : 'Cloud'}</Text>
+              )}
               {!!job.result.notes && <Text style={u.body}>{job.result.notes}</Text>}
             </>
+          )}
+          {!!job.recognizedText && showText[job.id] && (
+            <Text selectable style={u.body}>
+              {job.recognizedText}
+            </Text>
           )}
           {!!(job.error || job.reviewError) && (
             <Text accessibilityRole="alert" style={[u.body, { color: C.red }]}>
@@ -113,6 +138,38 @@ export function ReceiptScanner({
             </Text>
           )}
           <View style={u.row}>
+            {batch.deviceOcr && job.status === 'error' && (
+              <Button
+                small
+                secondary
+                disabled={batch.processing}
+                accessibilityLabel={`Enter ${job.name} manually`}
+                onPress={() => review(job.id)}
+              >
+                Enter manually
+              </Button>
+            )}
+            {batch.deviceOcr && ['pending', 'ready', 'error'].includes(job.status) && (
+              <Button
+                small
+                secondary
+                disabled={batch.processing}
+                accessibilityLabel={`Use cloud OCR for ${job.name}`}
+                onPress={() => cloudScan(job.id)}
+              >
+                Use cloud OCR
+              </Button>
+            )}
+            {!!job.recognizedText && (
+              <Button
+                small
+                secondary
+                accessibilityLabel={`Show receipt text for ${job.name}`}
+                onPress={() => setShowText((old) => ({ ...old, [job.id]: !old[job.id] }))}
+              >
+                {showText[job.id] ? 'Hide text' : 'Show text'}
+              </Button>
+            )}
             {job.status === 'ready' && (
               <Button
                 small

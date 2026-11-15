@@ -1,41 +1,49 @@
-# Receipt formats and device OCR
+# Receipt OCR
 
-## HEIC / HEIF
+## iOS
 
-The scanner accepts `.heic` and `.heif` in single and batch uploads, alongside JPG, PNG, WEBP and PDF. Missing/generic file MIME types fall back to the filename extension.
+New iOS builds use Apple Vision for image receipts, including HEIC/HEIF. Camera and file uploads use the same queue; batches still process every selected receipt. Vision runs on a serial background queue, without calling the backend or LiteLLM.
 
-Deployed to US central and Singapore on 2026-11-15. Real HEIC single/bulk OCR passed through both public HTTPS APIs; both Argo applications are synced and healthy.
+The native module is in `apps/mobile/modules/pocket-receipt-ocr`. It reads local files only, validates the 8 MB / 50 MP limits, applies image orientation and scales to a 4096-pixel longest edge before accurate text recognition. English, Chinese and French models are selected only when supported by the installed Vision revision; automatic language detection is enabled.
 
-The API decodes the primary HEIF image to JPEG before cloud OCR. It applies container rotation/mirroring, strips metadata, limits the longest edge to 4096 pixels and rejects corrupt or mismatched files before charging AI quota. Limits: 8 MB input/output, 50 megapixels before decoding, one HEIF decode at a time per API worker. Conversion runs outside the async request loop. The source file is not saved by the backend.
+`src/receipt-text.ts` groups text observations into rows and extracts merchant, final total, explicit currency and printed date. Subtotals, taxes, cash tender, refunds and conflicting totals are not treated as the final expense. Ambiguous dollar signs, ambiguous numeric dates, missing fields and low-confidence text require review. Category defaults to Other. This is a conservative parser, not a claim of universal receipt accuracy.
 
-Server conversion also works for browsers without a HEIC decoder; no browser preview or customer conversion step is needed. This changes file support, not the OCR provider. Current scanning still uploads images for cloud OCR.
+The receipt card shows **On-device** and lets users inspect recognized text. Missing amount/currency/date values stay blank in review. Failed scans allow manual entry. No raw text is added to the saved ledger; files and recognized text stay in the transient scan queue, which clears on sign-out. Picker cache files follow the OS/Expo cache lifecycle.
 
-## Device OCR assessment
+Cloud OCR is optional on iOS: tap **Use cloud OCR**, then confirm the upload. Failures and unsupported files never trigger automatic uploads. PDFs currently need this explicit cloud path or manual entry. Missing native modules in an older build show an install-new-build message and preserve the cloud option.
 
-| Platform | Recommended engine | Integration |
-| --- | --- | --- |
-| iOS | Apple Vision `VNRecognizeTextRequest`, accurate mode | System framework; extract text from selected/camera images. VisionKit can add a native capture UI later. |
-| Android | Google ML Kit Text Recognition v2 | On-device SDK. Bundle Latin and Chinese models for US/Singapore receipts; add other scripts as needed. |
-| Web | Existing cloud OCR | Native Vision/ML Kit modules are unavailable in a browser. |
+## Build and test
 
-[Apple Vision](https://developer.apple.com/documentation/vision/recognizing-text-in-images) processes images on-device, including offline. [VisionKit](https://developer.apple.com/documentation/visionkit/scanning-data-with-the-camera) provides a camera scanning UI with device-availability checks. Vision is sufficient for the existing still-image upload flow.
+A new native binary is required. JavaScript updates and Expo Go cannot add the module.
 
-[ML Kit](https://developers.google.com/ml-kit) also processes text on-device. It is an SDK to include, rather than a universal Android OS text API. Its [Android installation options](https://developers.google.com/ml-kit/vision/text-recognition/v2/android) are bundled models (available immediately/offline, about 4 MB per script per architecture) or Play Services downloads (smaller app, unavailable until downloaded). Bundled models avoid first-use downloads and suit offline receipt scans. HEIC decoding depends on the Android device; retain a conversion/cloud fallback.
+```bash
+cd apps/mobile
+npx eas-cli@latest build --platform ios --profile development
+npx expo start --dev-client --lan
+```
 
-Both engines return recognized text and layout, not a complete validated receipt. The app must identify the final total rather than tax/subtotal, resolve ambiguous `$` currency/date formats and assign a category. Local OCR has no per-image cloud inference call; end-to-end cost and accuracy need receipt evaluation.
+For TestFlight use the production build/submit steps in [TESTFLIGHT.md](TESTFLIGHT.md). Local `npm run ios` builds with Xcode; this workstation's Xcode 14.1 is below the project's native requirements. CI uses a current macOS/Xcode runner to compile the app and Expo bridge without Apple signing.
 
-## Proposed integration
+Local checks: `npm run test:ios-ocr` exercises the real Vision engine with PNG, HEIC and rotated JPEG fixtures, and rejects remote URLs, unreadable files and oversized files. The same core typechecks against the available iOS simulator SDK. TypeScript tests cover parsing, missing-field review, explicit cloud routing and failure without automatic fallback. Web tests cover the shared receipt queue/review UI; they do not execute the iOS bridge.
 
-1. Add a local [Expo native module](https://docs.expo.dev/modules/get-started/) exposing `recognize(uri)` for Vision/ML Kit. Return ordered text lines, bounds and optional confidence. Check engine availability and selected script; do not silently upload failed local scans.
-2. Parse clear merchant/total/currency/date fields on-device and show the existing review form. Keep incomplete fields editable; category can default to Other.
-3. Offer text-only cloud parsing for ambiguous receipts through an authenticated, quota-limited endpoint and a cheap LiteLLM route. This endpoint is not implemented yet.
-4. Offer image cloud OCR for unreadable files, unsupported devices/scripts and PDFs. Preserve batch progress, retry and review behavior.
-5. Evaluate real English/French/Chinese receipts, mixed scripts, tax/tip/subtotal distractors, ambiguous currencies, rotation and poor lighting on iPhone/Android before enabling device OCR by default.
+On an iPhone:
 
-The native module requires a new development/TestFlight/Android build; an Expo Go session or JavaScript-only update cannot add it. PDFs need page rasterization or the existing cloud route.
+1. Sign in once, then enable airplane mode and select receipts already stored on the phone.
+2. Process one image and a batch. Confirm **On-device**, review totals/currencies/dates and save.
+3. Test an ambiguous `$` currency/date and a blurry receipt. Verify manual correction and **Show text**.
+4. Try a PDF or failed scan. Verify no automatic cloud call; cancel the cloud confirmation.
+5. Restore connectivity and confirm cloud OCR for one receipt. Verify its **Cloud** label and normal quota/auth behavior.
 
-## Verification
+Real-device validation and a signed TestFlight build remain separate from the unsigned CI build.
 
-HEIC conversion has API tests using a real synthetic receipt container, including MIME aliases, metadata removal, rotation, corrupt inputs and size limits. Browser tests cover HEIC/HEIF batch selection on desktop, phone viewport and WebKit. These do not replace testing the iPhone/Android file pickers.
+## Android and web
 
-An Apple Vision probe on the development Mac recognized the merchant and `TOTAL USD 5.00` in both PNG and HEIC synthetic fixtures. This validates the framework with these files on macOS; iOS native integration, Android execution and real receipt accuracy are not yet tested. Device OCR remains a proposed integration; current app scans use cloud OCR.
+These retain the existing cloud scanner. Android on-device OCR is not implemented yet. [ML Kit Text Recognition v2](https://developers.google.com/ml-kit/vision/text-recognition/v2/android) is the planned engine; bundled Latin/Chinese models avoid first-use downloads. A later text-only cloud parser could help with ambiguous local OCR without uploading an image; that endpoint is not implemented.
+
+## HEIC / HEIF backend
+
+The API supports HEIC/HEIF alongside JPG, PNG, WEBP and PDF. It converts the primary HEIF image to JPEG, applies container orientation, strips metadata and validates size before charging AI quota. Conversion runs outside the request loop and allows one HEIF decode per API worker. The source file is not saved by the backend.
+
+This path is deployed in US central and Singapore and was live-tested for single/bulk HEIC OCR. Server conversion also supports browsers without a HEIC decoder.
+
+References: [Apple Vision](https://developer.apple.com/documentation/vision/recognizing-text-in-images), [Expo local modules](https://docs.expo.dev/modules/get-started/).

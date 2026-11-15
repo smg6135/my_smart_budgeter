@@ -1,0 +1,9 @@
+{
+  "name": "pocket-receipt-ocr",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "description": "On-device receipt text recognition with Apple Vision",
+  "license": "MIT",
+  "author": "Pocket Budget"
+}

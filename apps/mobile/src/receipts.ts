@@ -32,6 +32,8 @@ export type ReceiptFile = { id: string; uri: string; name: string; mime: string;
 export type ReceiptJob = ReceiptFile & {
   status: 'pending' | 'processing' | 'ready' | 'error' | 'saved';
   result?: ScanResult;
+  engine?: 'device' | 'cloud';
+  recognizedText?: string;
   error?: string;
   reviewError?: string;
 };

@@ -28,4 +28,6 @@ Local services: frontend :8081, API :8000, Auth :9099, Firestore :8080, emulator
 
 Dependency check: no high/critical npm advisories after compatible fixes; moderate Expo/ESLint tooling advisories remain.
 
-2026-11-15 receipt update: HEIC/HEIF support deployed to both regions through release PR #3. Verification: 46 backend tests, 22 TypeScript tests, full browser CI (60 checks), lint/typecheck and Linux codec smoke pass. Real HEIC single/bulk OCR, planning/conversation, auth, FX and quota checks pass through both public APIs; both Argo applications are synced and healthy. See [device OCR assessment](RECEIPT_OCR.md) for the Apple Vision probe and Android ML Kit integration plan. Native device OCR is not enabled.
+2026-11-15 HEIC update: HEIC/HEIF deployed to both regions through release PR #3. Verification: 46 backend tests, 22 TypeScript tests, browser CI (60 checks), lint/typecheck and Linux codec smoke passed. Real HEIC single/bulk OCR and the existing API acceptance checks passed in both regions.
+
+iOS OCR: Apple Vision module, local receipt parsing, batch queue/review, manual correction and explicit cloud confirmation implemented. The Vision core passes real PNG/HEIC/rotated-photo tests and iOS SDK typechecking. Parser/routing tests and shared review browser tests pass. Native app/bridge compilation runs in the new iOS CI workflow. A fresh signed native build and physical-device checks are still required. Android on-device OCR remains planned. See [receipt OCR](RECEIPT_OCR.md).
