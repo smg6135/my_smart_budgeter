@@ -126,6 +126,8 @@ Live checks passed in both regions: all four AI routes, auth, FX, global daily q
 
 Run the cloud smoke test with operator ADC. It creates/deletes only its own throwaway account and quota document. `--ai` makes small paid calls; `--research` also enables planning web search.
 
+If signed in through `gcloud auth login` only, add `--gcloud-auth` to use a short-lived operator token in memory. For HEIC verification, also pass `--receipt services/api/tests/fixtures/receipt.heic` with `--ai`.
+
 ```bash
 services/api/.venv/bin/python scripts/smoke-cloud.py --url https://backend.normiesai.com
 services/api/.venv/bin/python scripts/smoke-cloud.py --url https://sg.backend.normiesai.com --ai

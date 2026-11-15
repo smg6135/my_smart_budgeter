@@ -4,6 +4,8 @@
 
 The scanner accepts `.heic` and `.heif` in single and batch uploads, alongside JPG, PNG, WEBP and PDF. Missing/generic file MIME types fall back to the filename extension.
 
+Deployed to US central and Singapore on 2026-11-15. Real HEIC single/bulk OCR passed through both public HTTPS APIs; both Argo applications are synced and healthy.
+
 The API decodes the primary HEIF image to JPEG before cloud OCR. It applies container rotation/mirroring, strips metadata, limits the longest edge to 4096 pixels and rejects corrupt or mismatched files before charging AI quota. Limits: 8 MB input/output, 50 megapixels before decoding, one HEIF decode at a time per API worker. Conversion runs outside the async request loop. The source file is not saved by the backend.
 
 Server conversion also works for browsers without a HEIC decoder; no browser preview or customer conversion step is needed. This changes file support, not the OCR provider. Current scanning still uploads images for cloud OCR.

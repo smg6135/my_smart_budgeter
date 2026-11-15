@@ -5,17 +5,22 @@ import base64
 import hashlib
 import os
 import secrets
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 import firebase_admin
 from firebase_admin import auth
 from google.cloud import firestore
+from google.oauth2.credentials import Credentials
 import httpx
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--url", required=True)
 parser.add_argument("--ai", action="store_true")
 parser.add_argument("--research", action="store_true")
+parser.add_argument(
+    "--gcloud-auth", action="store_true", help="Use the active gcloud operator login"
+)
 parser.add_argument(
     "--receipt", default=str(Path(__file__).parent / "fixtures/receipt-usd.png")
 )
@@ -36,7 +41,16 @@ settings = dict(
     for line in Path("apps/mobile/.env.production").read_text().splitlines()
     if "=" in line
 )
-app = firebase_admin.initialize_app(options={"projectId": "normies-main"})
+credentials = None
+if args.gcloud_auth:
+    token = subprocess.check_output(
+        [str(Path(__file__).resolve().parent / "gcloud.sh"), "auth", "print-access-token"],
+        text=True,
+    ).strip()
+    credentials = Credentials(token=token).with_quota_project("normies-main")
+app = firebase_admin.initialize_app(
+    credential=credentials, options={"projectId": "normies-main"}
+)
 password = secrets.token_urlsafe(24)
 user = auth.create_user(
     email="pocket-smoke-" + secrets.token_hex(6) + "@example.com",
@@ -45,7 +59,9 @@ user = auth.create_user(
     app=app,
 )
 # Use a real password sign-in to obtain a customer Firebase ID token.
-db = firestore.Client(project="normies-main", database="pocket-usage")
+db = firestore.Client(
+    project="normies-main", database="pocket-usage", credentials=credentials
+)
 day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 ref = db.collection("ai_daily_usage").document(
     day + "-" + hashlib.sha256(user.uid.encode()).hexdigest()
