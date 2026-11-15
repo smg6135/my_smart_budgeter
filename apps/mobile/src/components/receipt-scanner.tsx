@@ -25,7 +25,7 @@ export function ReceiptScanner({
           </Pill>
         )}
       </View>
-      <Text style={u.body}>Up to 20 files · 8 MB each · JPG, PNG, WEBP, PDF</Text>
+      <Text style={u.body}>20 files · 8 MB each · JPG, PNG, WEBP, HEIC/HEIF, PDF</Text>
       <View style={u.row}>
         <Button
           icon="cloud-upload-outline"
@@ -63,7 +63,7 @@ export function ReceiptScanner({
           </Button>
         </View>
       )}
-      <Text style={u.body}>Review results before saving. Files are sent to OpenAI.</Text>
+      <Text style={u.body}>Cloud OCR · Review before saving.</Text>
       {batch.jobs.map((job) => (
         <View
           key={job.id}

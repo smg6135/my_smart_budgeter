@@ -3,6 +3,31 @@ import { convertMinor, freshQuote, parseAmount, rateFor, supportedCurrency } fro
 import { Entry, State, today, validDate } from './finance';
 export const RECEIPT_LIMIT = 20;
 export const RECEIPT_MAX_BYTES = 8 * 1024 * 1024;
+export const RECEIPT_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+];
+export function receiptMime(name: string, mime?: string) {
+  const normalized = mime?.split(';')[0].trim().toLowerCase();
+  if (normalized === 'image/jpg') return 'image/jpeg';
+  return (
+    (normalized && RECEIPT_MIME_TYPES.includes(normalized) ? normalized : undefined) ||
+    {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+      heic: 'image/heic',
+      heif: 'image/heif',
+      pdf: 'application/pdf',
+    }[name.split('.').pop()?.toLowerCase() || ''] ||
+    ''
+  );
+}
 export type ReceiptFile = { id: string; uri: string; name: string; mime: string; size?: number };
 export type ReceiptJob = ReceiptFile & {
   status: 'pending' | 'processing' | 'ready' | 'error' | 'saved';

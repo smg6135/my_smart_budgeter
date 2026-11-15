@@ -41,6 +41,8 @@ Email/password + Google OAuth → Firebase ID token → regional HTTPS Gateway +
 
 Models are operator-configurable in `services/ai/config.yaml`. Bulk upload uses two concurrent requests, up to 20 files, 8 MB each. Review extracted expenses before saving.
 
+Receipts accept HEIC/HEIF, JPG, PNG, WEBP and PDF. HEIC/HEIF is converted to JPEG in the API. [Device OCR assessment](docs/RECEIPT_OCR.md) covers Apple Vision and Android ML Kit; on-device OCR is not enabled yet.
+
 Budgets remain on each device, scoped by account. Sign-in does not sync ledgers. Existing unscoped budgets remain untouched in legacy storage. Native tokens use SecureStore; web tokens use sessionStorage. Never put AI keys in `EXPO_PUBLIC_` variables.
 
 ## Guides

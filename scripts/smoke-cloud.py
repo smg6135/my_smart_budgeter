@@ -69,12 +69,22 @@ try:
         assert r.status_code == 200
         print(args.url, "auth + FX passed", flush=True)
         if args.ai:
-            data = base64.b64encode(Path(args.receipt).read_bytes()).decode()
+            receipt = Path(args.receipt)
+            mime = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".webp": "image/webp",
+                ".heic": "image/heic",
+                ".heif": "image/heif",
+                ".pdf": "application/pdf",
+            }[receipt.suffix.lower()]
+            data = base64.b64encode(receipt.read_bytes()).decode()
             for mode in ("bulk", "single"):
                 r = c.post(
                     args.url + "/v1/receipts/scan",
                     headers=headers,
-                    json={"data": data, "mime": "image/png", "mode": mode},
+                    json={"data": data, "mime": mime, "mode": mode},
                 )
                 print("OCR", mode, "HTTP", r.status_code, flush=True)
                 assert r.status_code == 200, r.text[:300]

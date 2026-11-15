@@ -27,3 +27,5 @@ Budgets remain device-local. Identity is global; usage counters and shared LiteL
 Local services: frontend :8081, API :8000, Auth :9099, Firestore :8080, emulator UI :4001. Local LiteLLM/Redis have no host ports.
 
 Dependency check: no high/critical npm advisories after compatible fixes; moderate Expo/ESLint tooling advisories remain.
+
+2026-11-15 receipt update: HEIC/HEIF support added to frontend and API. Local verification: 46 backend tests, 22 TypeScript tests, 15 receipt browser checks across desktop/mobile/WebKit, lint/typecheck and Linux codec smoke pass. See [device OCR assessment](RECEIPT_OCR.md) for the Apple Vision probe and Android ML Kit integration plan. Native device OCR is not enabled.

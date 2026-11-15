@@ -1,4 +1,6 @@
 import { textProblems } from './layout-helpers';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, test } from './fixtures';
 const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
@@ -120,6 +122,39 @@ test('receipt selection enforces the batch limit before any API call', async ({ 
   ).toBeVisible();
   await expect(page.getByTestId('receipt-row')).toHaveCount(0);
   expect(calls).toBe(0);
+});
+test('HEIC and HEIF files enter the batch with their correct MIME types', async ({ page }) => {
+  const mimes: string[] = [];
+  const heic = readFileSync(resolve('../../services/api/tests/fixtures/receipt.heic'));
+  await page.route('**/v1/receipts/scan', (route) => {
+    const body = route.request().postDataJSON();
+    mimes.push(body.mime);
+    expect(Buffer.from(body.data, 'base64')).toEqual(heic);
+    expect(body.mode).toBe('bulk');
+    return route.fulfill({
+      json: {
+        merchant: 'Pocket Cafe',
+        amount: 5,
+        currency: 'USD',
+        date: '2026-11-08',
+        category: 'Food & drinks',
+        notes: '',
+      },
+    });
+  });
+  const promise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Upload receipts', exact: true }).click();
+  const chooser = await promise;
+  await expect(page.locator('input[type=file]').last()).toHaveAttribute('accept', /image\/heic/);
+  await chooser.setFiles([
+    { name: 'IMG_1234.HEIC', mimeType: 'image/heic', buffer: heic },
+    { name: 'receipt.heif', mimeType: 'application/octet-stream', buffer: heic },
+  ]);
+  await expect(page.getByTestId('receipt-row')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Process receipts (2)', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save ready (2)', exact: true })).toBeEnabled();
+  expect(mimes.sort()).toEqual(['image/heic', 'image/heif']);
+  expect(await textProblems(page)).toEqual([]);
 });
 test('Plan includes budget controls and goals; old goal URL redirects', async ({ page }) => {
   await page.goto('/goals');

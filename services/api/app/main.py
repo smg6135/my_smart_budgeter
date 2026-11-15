@@ -1,5 +1,6 @@
 """Authenticated budget API. Financial records stay on the device."""
 
+import asyncio
 import base64
 import binascii
 import os
@@ -12,10 +13,12 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from starlette.concurrency import run_in_threadpool
 
 from .fx import router as fx_router
 from .settings import Settings, secret
 from .security import current_user, rate_limit, ai_quota
+from .receipt_images import HEIF_TYPES, heif_to_jpeg
 import firebase_admin
 from google.cloud import firestore
 from redis.asyncio import Redis
@@ -43,6 +46,7 @@ async def lifespan(app: FastAPI):
         app.state.client = client
         app.state.fx_cache = {}
         app.state.fx_locks = {}
+        app.state.heif_slots = asyncio.Semaphore(1)
         yield
         await app.state.redis.aclose()
         firebase_admin.delete_app(app.state.firebase)
@@ -185,7 +189,14 @@ class ChatResponse(PlanOutput):
 
 class ScanRequest(CustomerRequest):
     data: str = Field(min_length=1, max_length=11_200_000)
-    mime: Literal["image/jpeg", "image/png", "image/webp", "application/pdf"]
+    mime: Literal[
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "application/pdf",
+    ]
     mode: Literal["single", "bulk"] = "single"
 
 
@@ -320,20 +331,26 @@ async def scan(body: ScanRequest, request: Request, uid: str = Depends(current_u
         raise HTTPException(422, "Invalid base64 file.") from None
     if len(raw) > 8 * 1024 * 1024:
         raise HTTPException(413, "File must be 8 MB or smaller.")
+    mime, data = body.mime, body.data
+    if mime in HEIF_TYPES:
+        # Bound decoder memory per worker; do CPU work outside the event loop.
+        async with request.app.state.heif_slots:
+            raw = await run_in_threadpool(heif_to_jpeg, raw)
+        mime, data = "image/jpeg", base64.b64encode(raw).decode()
     signatures = {
         "application/pdf": raw.startswith(b"%PDF-"),
         "image/jpeg": raw.startswith(b"\xff\xd8\xff"),
         "image/png": raw.startswith(b"\x89PNG\r\n\x1a\n"),
         "image/webp": raw.startswith(b"RIFF") and raw[8:12] == b"WEBP",
     }
-    if not signatures[body.mime]:
+    if not signatures[mime]:
         raise HTTPException(422, "The file content does not match its selected type.")
     task = "ocr-bulk" if body.mode == "bulk" else "ocr-single"
     await ai_quota(request, uid, task)
-    url = f"data:{body.mime};base64,{body.data}"
+    url = f"data:{mime};base64,{data}"
     attachment = (
         {"type": "input_file", "filename": "bill.pdf", "file_data": url}
-        if body.mime == "application/pdf"
+        if mime == "application/pdf"
         else {"type": "input_image", "image_url": url}
     )
     result, _ = await respond(

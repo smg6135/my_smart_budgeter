@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { receiptEntry, ReceiptJob, runReceiptQueue } from '../src/receipts';
+import { receiptEntry, receiptMime, ReceiptJob, runReceiptQueue } from '../src/receipts';
 import { initialState, today } from '../src/finance';
 const job: ReceiptJob = {
   id: 'r',
@@ -17,6 +17,14 @@ const job: ReceiptJob = {
     notes: '',
   },
 };
+test('receipt uploads recognize HEIC and HEIF with missing or generic MIME types', () => {
+  assert.equal(receiptMime('IMG_1234.HEIC'), 'image/heic');
+  assert.equal(receiptMime('receipt.heif', 'application/octet-stream'), 'image/heif');
+  assert.equal(receiptMime('image', 'IMAGE/HEIC'), 'image/heic');
+  assert.equal(receiptMime('photo.jpg', 'image/jpg'), 'image/jpeg');
+  assert.equal(receiptMime('receipt.heic', 'image/jpeg'), 'image/jpeg');
+  assert.equal(receiptMime('receipt.txt', 'text/plain'), '');
+});
 test('receipt entries have stable IDs and use the printed amount', () => {
   const e = receiptEntry(job, initialState);
   assert.equal(e.id, 'receipt-r');

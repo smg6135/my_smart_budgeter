@@ -10,27 +10,15 @@ import {
   ReceiptJob,
   RECEIPT_LIMIT,
   RECEIPT_MAX_BYTES,
+  RECEIPT_MIME_TYPES,
+  receiptMime,
   runReceiptQueue,
 } from '../receipts';
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Receipt failed. Retry.');
-const accepted = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-function mimeFor(name: string, mime?: string) {
-  if (mime === 'image/jpg') return 'image/jpeg';
-  return (
-    (mime && accepted.includes(mime) ? mime : undefined) ||
-    {
-      jpg: 'image/jpeg',
-      jpeg: 'image/jpeg',
-      png: 'image/png',
-      webp: 'image/webp',
-      pdf: 'application/pdf',
-    }[name.split('.').pop()?.toLowerCase() || ''] ||
-    ''
-  );
-}
 async function fileData(file: ReceiptFile) {
   if ((file.size || 0) > RECEIPT_MAX_BYTES) throw new Error('File exceeds 8 MB.');
-  if (!accepted.includes(file.mime)) throw new Error('Use JPG, PNG, WEBP or PDF.');
+  if (!RECEIPT_MIME_TYPES.includes(file.mime))
+    throw new Error('Use JPG, PNG, WEBP, HEIC, HEIF or PDF.');
   if (Platform.OS === 'web') {
     const blob = await (await fetch(file.uri)).blob();
     if (blob.size > RECEIPT_MAX_BYTES) throw new Error('File exceeds 8 MB.');
@@ -76,13 +64,13 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
             id: id(),
             uri: photo.uri,
             name: photo.fileName || 'Receipt photo.jpg',
-            mime: photo.mimeType || 'image/jpeg',
+            mime: receiptMime(photo.fileName || photo.uri, photo.mimeType) || 'image/jpeg',
             size: photo.fileSize,
           },
         ];
       } else {
         const result = await DocumentPicker.getDocumentAsync({
-          type: accepted,
+          type: RECEIPT_MIME_TYPES,
           multiple: true,
           copyToCacheDirectory: true,
         });
@@ -91,7 +79,7 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
           id: id(),
           uri: asset.uri,
           name: asset.name,
-          mime: mimeFor(asset.name, asset.mimeType),
+          mime: receiptMime(asset.name, asset.mimeType),
           size: asset.size,
         }));
       }
