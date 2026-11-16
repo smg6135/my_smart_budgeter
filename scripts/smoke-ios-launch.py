@@ -34,7 +34,7 @@ with Path("/tmp/pocket-ios-runtime.log").open("w") as log:
         for _ in range(10):
             time.sleep(3)
             services = subprocess.check_output(["xcrun", "simctl", "spawn", simulator, "launchctl", "list"], text=True)
-            if not any(bundle_id in line and line.split()[0].isdigit() for line in services.splitlines()):
+            if not any(bundle_id in line and line.split()[0].isdigit() and int(line.split()[0]) > 0 for line in services.splitlines()):
                 raise RuntimeError("Release app exited during launch. Inspect the runtime log/crash report.")
             image = "/tmp/pocket-ios-launch.png"
             subprocess.run(["xcrun", "simctl", "io", simulator, "screenshot", image], check=True, stdout=subprocess.DEVNULL)

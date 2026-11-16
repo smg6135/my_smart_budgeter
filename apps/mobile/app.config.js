@@ -1,4 +1,10 @@
 module.exports = ({ config }) => {
+  if (
+    !(config.plugins || []).some(
+      (plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === 'expo-status-bar',
+    )
+  )
+    config.plugins = [...(config.plugins || []), 'expo-status-bar'];
   const iosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
   if (iosUrlScheme)
     config.plugins = [
@@ -18,11 +24,7 @@ module.exports = ({ config }) => {
     ]) {
       if (!process.env[key]) throw new Error('Production configuration missing: ' + key);
     }
-    for (const key of [
-      'EXPO_PUBLIC_API_URL',
-      'EXPO_PUBLIC_API_US_URL',
-      'EXPO_PUBLIC_API_SG_URL',
-    ]) {
+    for (const key of ['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_API_US_URL', 'EXPO_PUBLIC_API_SG_URL']) {
       const value = process.env[key] || '';
       if (!value.startsWith('https://') || new URL(value).origin !== value)
         throw new Error('Configure HTTPS origin: ' + key);

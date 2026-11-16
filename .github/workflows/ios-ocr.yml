@@ -38,6 +38,8 @@ jobs:
           cache: npm
           cache-dependency-path: apps/mobile/package-lock.json
       - run: npm ci
+      - name: Check Expo native dependency compatibility
+        run: npx expo install --check
       - name: Test Apple Vision against PNG, HEIC and rotated receipt fixtures
         run: npm run test:ios-ocr
       - name: Generate iOS project and install native modules

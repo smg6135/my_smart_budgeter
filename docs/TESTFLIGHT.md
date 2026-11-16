@@ -31,6 +31,8 @@ Install the resulting development build on a registered iPhone. The phone's `loc
 
 ## TestFlight
 
+The first 1.0.0 build had a native launch crash: ExpoModulesCore required `RCTStatusBarAppearance`, absent from React Native 0.88.0. The fix aligns the Expo SDK packages with React Native 0.88.1. It requires a fresh native build; reinstalling build 1 or applying a JavaScript update cannot repair it. CI now checks dependency compatibility and launches a Release simulator build to verify the sign-in screen.
+
 1. The US and Singapore APIs are deployed. Production public values are prepared in the ignored `apps/mobile/.env.production`.
 2. Create the App Store Connect app for bundle ID `com.mingonsong.pocketbudget`.
 3. Add the prepared public values in Expo project settings → Environment variables → production. Include Firebase configuration, Google web/iOS client IDs, reversed iOS URL scheme and both HTTPS API origins. Keep `EXPO_PUBLIC_AUTH_EMULATOR_URL` empty, including in local production builds, so the local `.env` cannot enable emulators. [Expo environment setup](https://docs.expo.dev/eas/environment-variables/manage/).
