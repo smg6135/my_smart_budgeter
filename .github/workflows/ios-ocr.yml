@@ -26,6 +26,10 @@ jobs:
       EXPO_PUBLIC_FIREBASE_PROJECT_ID: demo-pocket
       EXPO_PUBLIC_FIREBASE_API_KEY: fake-emulator-api-key
       EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-pocket.firebaseapp.com
+      EXPO_PUBLIC_AUTH_EMULATOR_URL: ''
+      EXPO_PUBLIC_API_URL: https://backend.normiesai.com
+      EXPO_PUBLIC_API_US_URL: https://backend.normiesai.com
+      EXPO_PUBLIC_API_SG_URL: https://sg.backend.normiesai.com
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,13 +42,19 @@ jobs:
         run: npm run test:ios-ocr
       - name: Generate iOS project and install native modules
         run: npx expo prebuild --platform ios
-      - name: Compile the iOS app and native OCR bridge
+      - name: Compile the release iOS app and native OCR bridge
         run: |
           xcodebuild -version
-          xcodebuild -workspace ios/PocketBudget.xcworkspace -scheme PocketBudget -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/pocket-ios-build CODE_SIGNING_ALLOWED=NO build > /tmp/pocket-ios-build.log 2>&1 || { tail -120 /tmp/pocket-ios-build.log; exit 1; }
+          xcodebuild -workspace ios/PocketBudget.xcworkspace -scheme PocketBudget -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/pocket-ios-build CODE_SIGNING_ALLOWED=NO build > /tmp/pocket-ios-build.log 2>&1 || { tail -120 /tmp/pocket-ios-build.log; exit 1; }
+      - name: Launch the release app and verify the sign-in screen
+        run: python3 ../../scripts/smoke-ios-launch.py /tmp/pocket-ios-build/Build/Products/Release-iphonesimulator/PocketBudget.app
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: ios-ocr-build-log
-          path: /tmp/pocket-ios-build.log
+          path: |
+            /tmp/pocket-ios-build.log
+            /tmp/pocket-ios-runtime.log
+            /tmp/pocket-ios-launch.png
+            ~/Library/Logs/DiagnosticReports/PocketBudget*
           retention-days: 7
