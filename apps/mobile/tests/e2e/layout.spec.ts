@@ -1,3 +1,4 @@
+import { openPlan, setBudget } from './helpers';
 import { expect, test } from './fixtures';
 import { demoState } from '../../src/finance';
 const paths = ['/', '/activity', '/plan', '/planner', '/tools', '/settings'];
@@ -25,6 +26,8 @@ test('all screens fit narrow widths with long labels and large amounts', async (
     for (const path of paths) {
       await page.goto(path);
       await expect(page.getByRole('heading').first()).toBeVisible();
+      if (path === '/plan')
+        await page.getByRole('button', { name: 'Open plan Monthly budget' }).click();
       const scroll = page.getByTestId('page-scroll');
       const distance = await scroll.evaluate((e) => e.scrollHeight - e.clientHeight);
       for (const offset of [0, distance / 2, distance]) {
@@ -38,7 +41,8 @@ test('all screens fit narrow widths with long labels and large amounts', async (
 });
 test('long form titles, buttons and currency controls remain usable at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
-  await page.goto('/goals');
+  await setBudget(page);
+  await openPlan(page);
   await page.getByRole('button', { name: 'New savings goal' }).click();
   await page
     .getByLabel('Name', { exact: true })
@@ -65,6 +69,8 @@ test('larger text reflows without colliding at phone width', async ({ page }) =>
   for (const path of paths) {
     await page.goto(path);
     await expect(page.getByRole('heading').first()).toBeVisible();
+    if (path === '/plan')
+      await page.getByRole('button', { name: 'Open plan Monthly budget' }).click();
     await page.evaluate(() => {
       for (const el of document.querySelectorAll<HTMLElement>('[dir="auto"],input,textarea')) {
         const style = getComputedStyle(el),
@@ -87,7 +93,8 @@ test('larger text reflows without colliding at phone width', async ({ page }) =>
 
 test('forms stay inside the viewport at keyboard-sized heights', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 480 });
-  await page.goto('/plan');
+  await setBudget(page);
+  await openPlan(page);
   await page.getByRole('button', { name: 'New savings goal', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Close form', exact: true })).toBeVisible();
   await page

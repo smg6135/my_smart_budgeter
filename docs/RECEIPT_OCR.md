@@ -2,7 +2,7 @@
 
 ## iOS
 
-New iOS builds use Apple Vision for image receipts, including HEIC/HEIF. Camera and file uploads use the same queue; batches still process every selected receipt. Vision runs on a serial background queue, without calling the backend or LiteLLM.
+New iOS builds use Apple Vision for image receipts, including HEIC/HEIF. **Photos** opens the native gallery with multiple selection; **Camera** captures a receipt. Both use the same batch queue. Vision runs on a serial background queue, without calling the backend or LiteLLM.
 
 The native module is in `apps/mobile/modules/pocket-receipt-ocr`. It reads local files only, validates the 8 MB / 50 MP limits, applies image orientation and scales to a 4096-pixel longest edge before accurate text recognition. English, Chinese and French models are selected only when supported by the installed Vision revision; automatic language detection is enabled.
 
@@ -12,7 +12,7 @@ The receipt card shows **On-device** and lets users inspect recognized text. Mis
 
 Budget-currency expenses can be saved offline. Foreign expenses still require a fresh cached exchange rate or a rate entered manually.
 
-Cloud OCR is optional on iOS: tap **Use cloud OCR**, then confirm the upload. Failures and unsupported files never trigger automatic uploads. PDFs currently need this explicit cloud path or manual entry. Missing native modules in an older build show an install-new-build message and preserve the cloud option.
+Cloud OCR is optional on iOS: tap **Use cloud OCR**, then confirm the upload. Failures never trigger automatic uploads. The app picker now selects photos only; PDF support remains available through the backend API. Missing native modules in an older build show an install-new-build message and preserve the cloud option.
 
 ## Build and test
 
@@ -33,7 +33,7 @@ On an iPhone:
 1. Sign in once, then enable airplane mode and select receipts already stored on the phone.
 2. Process one image and a batch. Confirm **On-device**, review totals/currencies/dates and save.
 3. Test an ambiguous `$` currency/date and a blurry receipt. Verify manual correction and **Show text**.
-4. Try a PDF or failed scan. Verify no automatic cloud call; cancel the cloud confirmation.
+4. Try a failed scan. Verify no automatic cloud call; cancel the cloud confirmation.
 5. Restore connectivity and confirm cloud OCR for one receipt. Verify its **Cloud** label and normal quota/auth behavior.
 
 Real-device validation and a signed TestFlight build remain separate from the unsigned CI build.

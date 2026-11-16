@@ -1,6 +1,6 @@
 export const regionEndpoints = {
-  US: process.env.EXPO_PUBLIC_API_US_URL,
-  Singapore: process.env.EXPO_PUBLIC_API_SG_URL,
+  US: process.env.EXPO_PUBLIC_API_US_URL || 'https://backend.normiesai.com',
+  Singapore: process.env.EXPO_PUBLIC_API_SG_URL || 'https://sg.backend.normiesai.com',
 };
 export const defaultApiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 export function validatedApiUrl(value: string) {

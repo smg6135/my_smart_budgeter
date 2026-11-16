@@ -33,24 +33,29 @@ export function ReceiptScanner({
           </Pill>
         )}
       </View>
-      <Text style={u.body}>20 files · 8 MB each · JPG, PNG, WEBP, HEIC/HEIF, PDF</Text>
-      <View style={u.row}>
-        <Button
-          icon="cloud-upload-outline"
-          disabled={batch.processing}
-          onPress={() => void batch.choose()}
-        >
-          Upload receipts
-        </Button>
-        {Platform.OS !== 'web' && (
+      <Text style={u.body}>Up to 20 photos · 8 MB each</Text>
+      <View style={[u.row, { alignItems: 'stretch' }]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Button
-            secondary
-            icon="camera-outline"
+            icon="images-outline"
+            accessibilityLabel="Upload receipts"
             disabled={batch.processing}
-            onPress={() => void batch.choose(true)}
+            onPress={() => void batch.choose()}
           >
-            Camera
+            Photos
           </Button>
+        </View>
+        {Platform.OS !== 'web' && (
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Button
+              secondary
+              icon="camera-outline"
+              disabled={batch.processing}
+              onPress={() => void batch.choose(true)}
+            >
+              Camera
+            </Button>
+          </View>
         )}
       </View>
       {batch.jobs.length > 0 && (

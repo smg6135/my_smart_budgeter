@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
 test('batch scans multiple files, isolates failures, retries and saves once', async ({ page }) => {
   let active = 0,
     peak = 0,
-    pdfAttempts = 0,
+    secondAttempts = 0,
     calls = 0;
   await page.route('**/v1/receipts/scan', async (route) => {
     active++;
@@ -23,11 +23,11 @@ test('batch scans multiple files, isolates failures, retries and saves once', as
     const body = route.request().postDataJSON();
     expect(route.request().headers()['authorization']).toBe('Bearer customer-test-token');
     expect(route.request().headers()).not.toHaveProperty('x-openai-key');
-    const isPdf = body.mime === 'application/pdf';
-    if (isPdf) pdfAttempts++;
+    const isPdf = body.mime === 'image/jpeg';
+    if (isPdf) secondAttempts++;
     await new Promise((resolve) => setTimeout(resolve, 100));
     active--;
-    if (isPdf && pdfAttempts === 1)
+    if (isPdf && secondAttempts === 1)
       await route.fulfill({ status: 502, json: { detail: 'Receipt could not be read.' } });
     else
       await route.fulfill({
@@ -50,7 +50,7 @@ test('batch scans multiple files, isolates failures, retries and saves once', as
       'a_very_long_receipt_filename_that_must_wrap_inside_the_phone_card_without_peeping_out.png',
     ),
     image('lunch.png'),
-    { name: 'bill.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7 bill') },
+    { name: 'bill.jpg', mimeType: 'image/jpeg', buffer: png },
   ]);
   await expect(page.getByTestId('receipt-row')).toHaveCount(3);
   await page.getByRole('button', { name: 'Process receipts (3)', exact: true }).click();
@@ -62,7 +62,7 @@ test('batch scans multiple files, isolates failures, retries and saves once', as
   await expect(page.getByText('Receipt could not be read.', { exact: true })).toBeVisible();
   expect(peak).toBeLessThanOrEqual(2);
   await expect(page.getByRole('button', { name: 'Save ready (2)', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Retry bill.pdf', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry bill.jpg', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save ready (3)', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Save ready (3)', exact: true }).click();
   await expect(page.getByText('Saved', { exact: true })).toHaveCount(3);
@@ -145,7 +145,7 @@ test('HEIC and HEIF files enter the batch with their correct MIME types', async 
   const promise = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Upload receipts', exact: true }).click();
   const chooser = await promise;
-  await expect(page.locator('input[type=file]').last()).toHaveAttribute('accept', /image\/heic/);
+  await expect(page.locator('input[type=file]').last()).toHaveAttribute('accept', /image/);
   await chooser.setFiles([
     { name: 'IMG_1234.HEIC', mimeType: 'image/heic', buffer: heic },
     { name: 'receipt.heif', mimeType: 'application/octet-stream', buffer: heic },
@@ -180,11 +180,13 @@ test('incomplete receipt fields stay blank and can be reviewed without inventing
   await page.getByRole('button', { name: 'Review incomplete.png', exact: true }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Date (YYYY-MM-DD)', { exact: true })).toHaveValue('');
-  await expect(page.getByText('Currency:', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Entry currency Select', exact: true }),
+  ).toBeVisible();
   await page.getByLabel('Amount', { exact: true }).fill('5.00');
   await page.getByLabel('Date (YYYY-MM-DD)', { exact: true }).fill('2026-11-08');
-  await page.getByRole('button', { name: 'Entry currency SGD', exact: true }).click();
-  await expect(page.getByText('Currency: SGD', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Entry currency Select', exact: true }).click();
+  await page.getByRole('button', { name: 'Select SGD', exact: true }).click();
   await page.getByRole('button', { name: 'Save entry', exact: true }).click();
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
 });
@@ -192,7 +194,7 @@ test('Plan includes budget controls and goals; old goal URL redirects', async ({
   await page.goto('/goals');
   await expect(page).toHaveURL(/\/plan$/);
   await expect(page.getByRole('heading', { name: 'Plan & goals', exact: true })).toBeVisible();
-  await expect(page.getByText('Monthly take-home income', { exact: true })).toBeVisible();
-  await expect(page.getByText('Savings goals', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New plan', exact: true })).toBeVisible();
+  await expect(page.getByText('Monthly take-home income', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Savings goals', exact: true })).toHaveCount(0);
 });

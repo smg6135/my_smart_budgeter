@@ -22,6 +22,16 @@ export type Goal = {
   emoji: string;
 };
 export type Message = { role: 'user' | 'assistant'; content: string };
+export type BudgetPlan = {
+  id: string;
+  name: string;
+  status: 'draft' | 'active' | 'inactive';
+  income: number;
+  savePercent: number;
+  bills: Bill[];
+  goals: Goal[];
+};
+export type PlanPeriod = { from: string; plan: BudgetPlan | null };
 export type State = {
   version: 1;
   currency: string;
@@ -36,6 +46,9 @@ export type State = {
   apiUrl: string;
   aiMode?: 'planning' | 'conversation';
   research: boolean;
+  preferredCurrencies?: string[];
+  plans?: BudgetPlan[];
+  planHistory?: PlanPeriod[];
 };
 export const today = () => {
   const d = new Date();
@@ -93,11 +106,12 @@ export function summary(s: State, now = today()) {
   );
   const income = s.income + sum('income');
   // A linked bill payment consumes its reservation, never the variable spending envelope.
+  const reserved = new Set(bills.map((bill) => bill.id));
   const spending = entries
-    .filter((e) => e.kind === 'expense' && !e.billId)
+    .filter((e) => e.kind === 'expense' && (!e.billId || !reserved.has(e.billId)))
     .reduce((a, e) => a + e.amount, 0);
   const paid = entries
-    .filter((e) => e.kind === 'expense' && e.billId)
+    .filter((e) => e.kind === 'expense' && e.billId && reserved.has(e.billId))
     .reduce((a, e) => a + e.amount, 0);
   const disposable = Math.max(0, income - fixed),
     savingsBudget = Math.round((disposable * s.savePercent) / 100),

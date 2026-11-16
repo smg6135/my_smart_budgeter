@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { request, ScanResult } from '../api';
 import { id, State } from '../finance';
@@ -55,26 +55,17 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
     picking.current = true;
     try {
       let files: ReceiptFile[] = [];
+      if (jobs.length >= RECEIPT_LIMIT)
+        throw new Error(`Maximum ${RECEIPT_LIMIT} receipts. Clear saved files first.`);
       if (camera) {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) throw new Error('Allow camera access to scan receipts.');
-        const result = await ImagePicker.launchCameraAsync({ quality: 0.75 });
-        if (result.canceled) return;
-        const photo = result.assets[0];
-        files = [
-          {
-            id: id(),
-            uri: photo.uri,
-            name: photo.fileName || 'Receipt photo.jpg',
-            mime: receiptMime(photo.fileName || photo.uri, photo.mimeType) || 'image/jpeg',
-            size: photo.fileSize,
-          },
-        ];
-      } else {
+      }
+      if (Platform.OS === 'web' && !camera) {
+        // Browser file inputs preserve HEIC files with generic MIME types.
         const result = await DocumentPicker.getDocumentAsync({
-          type: RECEIPT_MIME_TYPES,
+          type: RECEIPT_MIME_TYPES.filter((mime) => mime.startsWith('image/')),
           multiple: true,
-          copyToCacheDirectory: true,
         });
         if (result.canceled) return;
         files = result.assets.map((asset) => ({
@@ -83,6 +74,25 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
           name: asset.name,
           mime: receiptMime(asset.name, asset.mimeType),
           size: asset.size,
+        }));
+      } else {
+        const result = camera
+          ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsMultipleSelection: true,
+              selectionLimit: RECEIPT_LIMIT - jobs.length,
+              orderedSelection: true,
+              preferredAssetRepresentationMode:
+                ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
+            });
+        if (result.canceled) return;
+        files = result.assets.map((asset) => ({
+          id: id(),
+          uri: asset.uri,
+          name: asset.fileName || 'Receipt photo.jpg',
+          mime: receiptMime(asset.fileName || asset.uri, asset.mimeType) || 'image/jpeg',
+          size: asset.fileSize,
         }));
       }
       if (files.length + jobs.length > RECEIPT_LIMIT)

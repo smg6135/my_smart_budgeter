@@ -15,12 +15,11 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import Svg, { Circle } from 'react-native-svg';
 import {
   Bill,
-  demoState,
+  BudgetPlan,
   Entry,
   Goal,
   id,
@@ -28,7 +27,6 @@ import {
   Kind,
   Message,
   money,
-  monthLabel,
   State,
   summary,
   today,
@@ -48,6 +46,16 @@ import {
   units,
 } from './src/currency';
 import { useExchangeRates } from './src/hooks/use-exchange-rates';
+import {
+  addPlan,
+  editPlan,
+  migratePlans,
+  planAtDate,
+  projectPlan,
+  setPlanStatus,
+} from './src/plans';
+import { Select } from './src/components/select';
+import { BudgetCalendar } from './src/components/budget-calendar';
 import { CurrencyPicker } from './src/components/currency-picker';
 import { load, persist, removeLegacyProviderKey } from './src/storage';
 import { chat, ChatResult } from './src/api';
@@ -70,7 +78,7 @@ import {
 
 import { useAuth } from './src/hooks/use-auth';
 import { AuthScreen } from './src/components/auth-screen';
-import { Session, signOut, sendVerification, getAccessToken } from './src/lib/auth';
+import { Session, signOut } from './src/lib/auth';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { PageContext, routes, Tab } from './src/page-context';
 type Form = {
@@ -89,6 +97,8 @@ type Form = {
   percent: string;
   currency: string;
   exchangeRate: string;
+  planId: string;
+  activate: boolean;
 };
 const tabs: { name: Tab; icon: IconName }[] = [
   { name: 'Overview', icon: 'grid-outline' },
@@ -114,10 +124,12 @@ function AppContent({ session }: { session: Session }) {
     wide = width >= 1100 && fontScale < 1.4,
     columns = width >= 900 && fontScale < 1.25,
     compact = width < 420 || fontScale > 1.15;
+  const insets = useSafeAreaInsets();
   const pathname = usePathname(),
     router = useRouter();
   const tab = (Object.keys(routes) as Tab[]).find((k) => routes[k] === pathname) || 'Overview';
   function setTab(next: Tab) {
+    if (next === 'Plan') setSelectedPlanId(null);
     router.navigate(routes[next] as never);
   }
   const [s, setS] = useState<State | null>(null),
@@ -135,8 +147,11 @@ function AppContent({ session }: { session: Session }) {
     [chatInput, setChatInput] = useState(''),
     [proposal, setProposal] = useState<(ChatResult & { currency: string }) | null>(null),
     [sources, setSources] = useState<ChatResult['sources']>([]),
-    [filter, setFilter] = useState('All'),
-    [search, setSearch] = useState(''),
+    [filters, setFilters] = useState({ kind: 'All', category: 'All', from: '', to: '' }),
+    [draftFilters, setDraftFilters] = useState({ kind: 'All', category: 'All', from: '', to: '' }),
+    [selectedDate, setSelectedDate] = useState(today()),
+    [selectedPlanId, setSelectedPlanId] = useState<string | null>(null),
+    [addingCurrency, setAddingCurrency] = useState(false),
     [url, setUrl] = useState(''),
     [checking, setChecking] = useState(false),
     [scanNote, setScanNote] = useState('');
@@ -191,8 +206,13 @@ function AppContent({ session }: { session: Session }) {
       initial: '0',
       emoji: '🌱',
       percent: String(s?.savePercent ?? 30),
-      currency: s?.currency || 'SGD',
+      currency: s?.displayCurrency || s?.currency || 'SGD',
       exchangeRate: '',
+      planId:
+        selectedPlanId && tab === 'Plan'
+          ? selectedPlanId
+          : s?.plans?.find((p) => p.status === 'active')?.id || '',
+      activate: false,
       ...preset,
     });
   }
@@ -214,9 +234,10 @@ function AppContent({ session }: { session: Session }) {
         <Text style={u.body}>Loading…</Text>
       </View>
     );
-  const state = s,
-    m = summary(s),
-    t = trajectory(s),
+  const selectedPlan = s.plans?.find((p) => p.id === selectedPlanId);
+  const state = projectPlan(s, tab === 'Plan' && selectedPlan ? selectedPlan : undefined),
+    m = summary(state),
+    t = trajectory(state),
     fmt = (n: number) => displayAmount(n, s.currency, s.displayCurrency || s.currency, s.fx);
   const budgetMoney = (n: number) => money(n, s.currency, true);
   const foreignEntry =
@@ -230,13 +251,30 @@ function AppContent({ session }: { session: Session }) {
     : autoRate
       ? 1 / autoRate
       : undefined;
+  function changePlan(
+    change: (plan: BudgetPlan) => BudgetPlan,
+    planId = form?.planId ||
+      (tab === 'Plan' ? selectedPlanId : undefined) ||
+      s?.plans?.find((p) => p.status === 'active')?.id,
+  ) {
+    if (!planId) {
+      setNotice('Create a plan first.');
+      return;
+    }
+    update((old) => editPlan(old, planId, change));
+  }
   function saveForm() {
     if (!form) return;
     try {
-      const f = form,
+      const f = {
+          ...form,
+          date: form.type === 'entry' && !form.existing && !form.receiptId ? today() : form.date,
+        },
         amount = parseAmount(f.amount, f.type === 'entry' ? f.currency : state.currency);
       if (f.type !== 'plan' && amount <= 0) throw new Error('Amount must be greater than zero.');
-      if (f.type !== 'plan' && !f.title.trim()) throw new Error('Enter a name.');
+      if (f.type !== 'entry' && !f.title.trim()) throw new Error('Enter a name.');
+      if ((f.type === 'goal' || f.type === 'bill') && !f.planId)
+        throw new Error('Create or activate a plan first.');
       if (f.type !== 'plan' && !validDate(f.date))
         throw new Error('Use a valid date in YYYY-MM-DD format.');
       if (f.type === 'entry' && f.date > today())
@@ -281,7 +319,9 @@ function AppContent({ session }: { session: Session }) {
         }
         const entry: Entry = {
           id: f.existing || (f.receiptId ? `receipt-${f.receiptId}` : id()),
-          title: f.title.trim(),
+          title:
+            f.title.trim() ||
+            (f.kind === 'expense' ? f.category : f.kind === 'income' ? 'Income' : 'Savings'),
           amount: booked,
           ...(original ? { original } : {}),
           date: f.date,
@@ -307,7 +347,7 @@ function AppContent({ session }: { session: Session }) {
           date: f.date,
           recurring: f.recurring,
         };
-        update((old) => ({
+        changePlan((old) => ({
           ...old,
           bills: f.existing
             ? old.bills.map((b) => (b.id === f.existing ? bill : b))
@@ -325,7 +365,7 @@ function AppContent({ session }: { session: Session }) {
           deadline: f.date,
           emoji: f.emoji || '🌱',
         };
-        update((old) => ({
+        changePlan((old) => ({
           ...old,
           goals: f.existing
             ? old.goals.map((g) => (g.id === f.existing ? goal : g))
@@ -336,7 +376,17 @@ function AppContent({ session }: { session: Session }) {
         const percent = Number(f.percent);
         if (!Number.isInteger(percent) || percent < 0 || percent > 100)
           throw new Error('Savings percentage must be a whole number from 0 to 100.');
-        update((old) => ({ ...old, income: amount, savePercent: percent }));
+        if (f.planId)
+          changePlan(
+            (old) => ({ ...old, name: f.title.trim(), income: amount, savePercent: percent }),
+            f.planId,
+          );
+        else {
+          const next = addPlan(state, f.title.trim(), amount, percent);
+          const created = next.plans![next.plans!.length - 1];
+          setS(f.activate ? setPlanStatus(next, created.id, 'active') : next);
+          setSelectedPlanId(created.id);
+        }
       }
       if (f.receiptId) {
         const scanned = receipts.jobs.find((job) => job.id === f.receiptId)?.result;
@@ -369,25 +419,15 @@ function AppContent({ session }: { session: Session }) {
             ? 'Existing payments stay in Activity and become ordinary spending.'
             : 'Your totals will be recalculated immediately.',
       action: () => {
-        update((old) =>
-          type === 'entry'
-            ? { ...old, entries: old.entries.filter((e) => e.id !== itemId) }
-            : type === 'goal'
-              ? {
-                  ...old,
-                  goals: old.goals.filter((g) => g.id !== itemId),
-                  entries: old.entries.map((e) =>
-                    e.goalId === itemId ? { ...e, goalId: undefined } : e,
-                  ),
-                }
-              : {
-                  ...old,
-                  bills: old.bills.filter((b) => b.id !== itemId),
-                  entries: old.entries.map((e) =>
-                    e.billId === itemId ? { ...e, billId: undefined } : e,
-                  ),
-                },
-        );
+        if (type === 'entry')
+          update((old) => ({ ...old, entries: old.entries.filter((e) => e.id !== itemId) }));
+        else
+          changePlan((old) => ({
+            ...old,
+            ...(type === 'goal'
+              ? { goals: old.goals.filter((g) => g.id !== itemId) }
+              : { bills: old.bills.filter((b) => b.id !== itemId) }),
+          }));
         setNotice('Deleted.');
       },
     });
@@ -620,6 +660,7 @@ function AppContent({ session }: { session: Session }) {
           <View style={[u.row, { flexWrap: 'wrap' }]}>
             <Button
               small
+              disabled={selectedPlan?.status !== 'active'}
               onPress={() =>
                 open('entry', {
                   kind: 'saving',
@@ -661,227 +702,165 @@ function AppContent({ session }: { session: Session }) {
     </Card>
   );
   function overview() {
+    const historical = selectedDate < today();
+    const viewState = historical ? planAtDate(s!, selectedDate) : projectPlan(s!);
+    const totals = summary(viewState, selectedDate);
+    const active = historical
+      ? [...(s!.planHistory || [])].reverse().find((p) => p.from <= selectedDate)?.plan
+      : s!.plans?.find((p) => p.status === 'active');
+    const dayEntries = totals.entries.filter((e) => e.date === selectedDate);
+    const stat = (value: number) => {
+      const label = fmt(value);
+      if (label.length <= 11) return label;
+      const currency = state.displayCurrency || state.currency;
+      const rate = rateFor(state.fx, state.currency, currency);
+      const target = rate === undefined ? state.currency : currency;
+      return new Intl.NumberFormat('en-SG', {
+        style: 'currency',
+        currency: target,
+        notation: 'compact',
+        maximumFractionDigits: 1,
+      }).format(
+        (rate === undefined ? value : convertMinor(value, state.currency, target, rate)) /
+          units(target),
+      );
+    };
+    const allocationCard = (
+      <Card>
+        <Text style={u.h2}>Allocation</Text>
+        {[
+          { label: 'Bills', amount: totals.fixed },
+          { label: 'Spending', amount: totals.spendingBudget },
+          { label: 'Savings', amount: totals.savingsBudget },
+        ].map((item) => (
+          <View key={item.label} style={{ gap: 8 }}>
+            <View style={u.between}>
+              <Text style={u.body}>{item.label}</Text>
+              <Text style={st.bold}>{fmt(item.amount)}</Text>
+            </View>
+            <Progress value={totals.income ? (item.amount / totals.income) * 100 : 0} />
+          </View>
+        ))}
+      </Card>
+    );
     return (
       <>
-        {heading(
-          'Overview',
-          <View style={st.month}>
-            <Icon name="calendar-outline" size={16} />
-            <Text style={{ color: C.ink, fontSize: 12 }}>{monthLabel()}</Text>
-          </View>,
-        )}
-        {!s!.income && (
-          <Card style={{ backgroundColor: C.mint, marginBottom: 20 }}>
-            <Text style={u.h2}>Set monthly income</Text>
-            <Text style={u.body}>Set income, bills and savings percentage.</Text>
-            <View style={[u.row, { flexWrap: 'wrap' }]}>
-              <Button onPress={() => open('plan', { amount: '', percent: '30' })}>
-                Set budget
-              </Button>
-              <Button
-                secondary
-                onPress={() =>
-                  setConfirm({
-                    title: 'Try a sample budget?',
-                    body: 'This replaces the current local budget with editable sample data.',
-                    action: () => {
-                      setS({
-                        ...demoState(),
-                        apiUrl: state.apiUrl,
-                        fx: state.fx?.base === 'SGD' ? state.fx : undefined,
-                        displayCurrency: state.displayCurrency,
-                      });
-                      setNotice('Demo loaded.');
-                    },
-                  })
-                }
-              >
-                Try demo
-              </Button>
-            </View>
+        {heading('Overview')}
+        {(state.displayCurrency || state.currency) !== state.currency &&
+          !rateFor(state.fx, state.currency, state.displayCurrency!) && (
+            <Text style={[u.body, { marginBottom: 16 }]}>
+              Rate unavailable · totals shown in {state.currency}
+            </Text>
+          )}
+        {!s!.plans?.some((p) => p.status === 'active') && !historical && (
+          <Card style={{ backgroundColor: C.mint, marginBottom: 16 }}>
+            <Text style={u.h2}>Monthly income</Text>
+            <Button
+              onPress={() =>
+                open('plan', {
+                  title: 'Monthly budget',
+                  amount: '',
+                  percent: '30',
+                  planId: '',
+                  activate: true,
+                })
+              }
+            >
+              Set budget
+            </Button>
           </Card>
         )}
         <View style={[st.grid, { flexDirection: columns ? 'row' : 'column' }]}>
-          <View style={{ flex: columns ? 1.8 : undefined, gap: 20, minWidth: 0 }}>
+          <View style={{ flex: columns ? 1.4 : undefined, gap: 16, minWidth: 0 }}>
             <View style={st.hero}>
-              <View style={u.between}>
-                <Text style={[u.caption, { color: '#BAD0BD' }]}>REMAINING THIS MONTH</Text>
-              </View>
-              <Text style={[st.heroAmount, { fontSize: compact ? 36 : 49 }]}>
-                {fmt(m.remaining)}
+              <Text style={[u.caption, { color: '#BAD0BD', letterSpacing: 1 }]}>
+                {historical ? 'MONTH SUMMARY' : 'REMAINING THIS MONTH'}
               </Text>
-              <Text style={{ color: '#C2D5C5', fontSize: 13, lineHeight: 21 }}>
-                {m.remaining < 0 ? 'Over budget.' : 'After bills and savings.'}
+              <Text
+                style={[
+                  st.heroAmount,
+                  { fontSize: compact ? 34 : 44, lineHeight: compact ? 46 : 58 },
+                ]}
+              >
+                {fmt(totals.remaining)}
               </Text>
-              <View style={st.heroLine} />
-              <View style={u.between}>
-                <View style={{ gap: 5 }}>
-                  <Text style={{ fontSize: 20, color: '#fff', fontWeight: '500' }}>
-                    {fmt(m.daily)}
-                    <Text style={{ fontSize: 12, color: '#BAD0BD' }}> / day</Text>
+              <Text style={{ color: '#C2D5C5', fontSize: 12, lineHeight: 18 }}>
+                {active?.name || 'No active plan'} · {state.displayCurrency || state.currency}
+              </Text>
+              {!historical && (
+                <>
+                  <View style={st.heroLine} />
+                  <Text style={{ color: '#BAD0BD', fontSize: 12, lineHeight: 18 }}>
+                    Daily allowance
                   </Text>
-                  <Text style={{ fontSize: 11, color: '#BAD0BD' }}>
-                    {m.days} days left, including today
+                  <Text
+                    testID="daily-allowance"
+                    style={{ color: '#fff', fontSize: 26, lineHeight: 36, flexShrink: 1 }}
+                  >
+                    {fmt(totals.daily)}
+                    <Text style={{ fontSize: 12 }}> / day</Text>
                   </Text>
-                </View>
-                <Button secondary icon="add" onPress={() => open('entry')}>
-                  Add expense
-                </Button>
-              </View>
+                  <Text style={{ color: '#BAD0BD', fontSize: 11, lineHeight: 17 }}>
+                    {totals.days} days left
+                  </Text>
+                </>
+              )}
             </View>
             <View
-              style={[
-                u.row,
-                { alignItems: 'stretch', gap: 12, flexDirection: compact ? 'column' : 'row' },
-              ]}
+              testID="overview-statistics"
+              style={{ flexDirection: 'row', gap: 8, alignItems: 'stretch' }}
             >
               {[
-                {
-                  label: 'MONTHLY INCOME',
-                  value: m.income,
-                  icon: 'arrow-down-outline' as IconName,
-                  color: C.green,
-                },
-                {
-                  label: 'SPENT SO FAR',
-                  value: m.spending + m.paid,
-                  icon: 'arrow-up-outline' as IconName,
-                  color: C.gold,
-                },
-                {
-                  label: 'SAVED THIS MONTH',
-                  value: m.saved,
-                  icon: 'leaf-outline' as IconName,
-                  color: C.green,
-                },
-              ].map((x) => (
-                <Card key={x.label} style={{ flex: compact ? undefined : 1, padding: 18, gap: 12 }}>
-                  <Icon name={x.icon} color={x.color} size={19} />
-                  <Text style={[u.caption, { fontSize: 8, letterSpacing: 0.8 }]}>{x.label}</Text>
+                { label: 'Income', value: totals.income },
+                { label: 'Spent', value: totals.spending + totals.paid },
+                { label: 'Saved', value: totals.saved },
+              ].map((item) => (
+                <Card key={item.label} style={{ flex: 1, padding: compact ? 10 : 16, gap: 8 }}>
+                  <Text style={[u.body, { fontSize: 11 }]}>{item.label}</Text>
                   <Text
+                    accessibilityLabel={`${item.label} ${fmt(item.value)}`}
                     style={{
-                      fontSize: columns ? 21 : 17,
-                      fontWeight: '500',
                       color: C.ink,
-                      letterSpacing: -0.5,
+                      fontSize: compact ? 14 : 19,
+                      lineHeight: compact ? 22 : 28,
+                      fontWeight: '600',
+                      flexShrink: 1,
                     }}
                   >
-                    {fmt(x.value)}
+                    {stat(item.value)}
                   </Text>
                 </Card>
               ))}
             </View>
+            {columns && allocationCard}
+          </View>
+          <View style={{ flex: columns ? 1 : undefined, gap: 16, minWidth: 0 }}>
+            <BudgetCalendar date={selectedDate} onChange={setSelectedDate} entries={s!.entries} />
             <Card>
+              <Text style={u.h2}>
+                {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-SG', {
+                  day: 'numeric',
+                  month: 'long',
+                })}
+              </Text>
               <View style={u.between}>
-                <Text style={u.h2}>Recent activity</Text>
-                <Pressable accessibilityRole="button" onPress={() => setTab('Activity')}>
-                  <Text style={st.textLink}>All activity ↗</Text>
-                </Pressable>
+                <Text style={u.body}>Spent</Text>
+                <Text style={st.bold}>
+                  {fmt(
+                    dayEntries
+                      .filter((e) => e.kind === 'expense')
+                      .reduce((sum, e) => sum + e.amount, 0),
+                  )}
+                </Text>
               </View>
-              {s!.entries.length ? (
-                s!.entries
-                  .filter((e) => e.date <= today())
-                  .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
-                  .slice(0, 4)
-                  .map(entryRow)
+              {dayEntries.length ? (
+                dayEntries.map(entryRow)
               ) : (
-                <Empty
-                  title="No activity"
-                  body="Add an expense or income."
-                  action="Add your first entry"
-                  onPress={() => open('entry')}
-                />
+                <Text style={u.body}>No entries</Text>
               )}
             </Card>
+            {!columns && allocationCard}
           </View>
-          <View style={{ flex: columns ? 1 : undefined, gap: 20, minWidth: 0 }}>
-            <Card>
-              <View style={u.between}>
-                <Text style={u.h2}>Allocation</Text>
-                <Icon name="pie-chart-outline" color={C.muted} size={18} />
-              </View>
-              <View style={{ alignItems: 'center', justifyContent: 'center', height: 173 }}>
-                <Svg width={176} height={176} viewBox="0 0 176 176">
-                  <Circle cx="88" cy="88" r="66" stroke={C.line} strokeWidth="17" fill="none" />
-                  {m.income > 0 &&
-                    [
-                      { v: m.fixed, c: '#B8C8B4', offset: 0 },
-                      { v: m.spendingBudget, c: C.ink, offset: m.fixed },
-                      { v: m.savingsBudget, c: '#B8D883', offset: m.fixed + m.spendingBudget },
-                    ].map((a, i) => (
-                      <Circle
-                        key={i}
-                        cx="88"
-                        cy="88"
-                        r="66"
-                        stroke={a.c}
-                        strokeWidth="17"
-                        fill="none"
-                        strokeDasharray={`${Math.min(1, a.v / m.income) * 414.69} 414.69`}
-                        strokeDashoffset={(-a.offset / m.income) * 414.69}
-                        transform="rotate(-90 88 88)"
-                      />
-                    ))}
-                </Svg>
-                <View
-                  style={{
-                    position: 'absolute',
-                    width: 100,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <Text style={{ fontSize: 28, color: C.ink, fontWeight: '500' }}>
-                    {s!.savePercent}%
-                  </Text>
-                </View>
-              </View>
-              <Text style={[u.body, { textAlign: 'center' }]}>Savings allocation</Text>
-              {[
-                { title: 'Essentials', amount: m.fixed, color: '#B8C8B4' },
-                { title: 'Spending', amount: m.spendingBudget, color: C.ink },
-                { title: 'Savings', amount: m.savingsBudget, color: '#B8D883' },
-              ].map((a) => (
-                <View key={a.title} style={u.between}>
-                  <View style={[u.row, { gap: 8 }]}>
-                    <View
-                      style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: a.color }}
-                    />
-                    <Text style={u.body}>{a.title}</Text>
-                  </View>
-                  <Text style={{ fontSize: 12, color: C.ink, fontWeight: '600' }}>
-                    {fmt(a.amount)}
-                  </Text>
-                </View>
-              ))}
-              <Button small secondary onPress={() => setTab('Plan')}>
-                Edit allocation
-              </Button>
-            </Card>
-          </View>
-        </View>
-        <View style={[u.between, { marginTop: 30, marginBottom: 16 }]}>
-          <View style={{ gap: 5 }}>
-            <Text style={u.h2}>Savings goals</Text>
-          </View>
-          <Pressable accessibilityRole="button" onPress={() => setTab('Plan')}>
-            <Text style={st.textLink}>All goals ↗</Text>
-          </Pressable>
-        </View>
-        <View style={[st.grid, { flexDirection: columns ? 'row' : 'column' }]}>
-          {t.rows.length ? (
-            t.rows.slice(0, 2).map((g) => goalCard(g, true))
-          ) : (
-            <Card style={{ flex: columns ? 1 : undefined }}>
-              <Empty
-                title="No savings goals"
-                body="Set a target and deadline."
-                action="Create a goal"
-                onPress={() => open('goal')}
-              />
-            </Card>
-          )}
         </View>
       </>
     );
@@ -890,67 +869,150 @@ function AppContent({ session }: { session: Session }) {
     const entries = s!.entries
       .filter(
         (e) =>
-          (filter === 'All' || e.kind === filter) &&
-          (e.title + ' ' + e.category).toLowerCase().includes(search.toLowerCase()),
+          (filters.kind === 'All' || e.kind === filters.kind) &&
+          (filters.category === 'All' || e.category === filters.category) &&
+          (!filters.from || e.date >= filters.from) &&
+          (!filters.to || e.date <= filters.to),
       )
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
     return (
       <>
         {heading(
           'Activity',
-          <Button icon="add" onPress={() => open('entry')}>
-            Add an entry
+          <Button icon="add" accessibilityLabel="Add an entry" onPress={() => open('entry')}>
+            Entry
           </Button>,
         )}
         <Card>
-          <Field
-            label="Search activity"
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search entries"
-          />
-          <View style={[u.row, { flexWrap: 'wrap' }]}>
-            {['All', 'expense', 'income', 'saving'].map((f) => (
-              <Pressable
-                key={f}
-                accessibilityRole="button"
-                onPress={() => setFilter(f)}
-                style={[st.chip, filter === f && st.activeChip]}
-              >
-                <Text style={[st.chipText, filter === f && { color: C.green }]}>
-                  {f === 'All'
-                    ? 'All activity'
-                    : f === 'saving'
-                      ? 'Savings'
-                      : f === 'income'
-                        ? 'Extra income'
-                        : 'Expenses'}
-                </Text>
-              </Pressable>
-            ))}
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Select
+                label="Type"
+                value={draftFilters.kind}
+                onChange={(kind) => setDraftFilters({ ...draftFilters, kind })}
+                options={[
+                  { value: 'All', label: 'All' },
+                  { value: 'expense', label: 'Expense' },
+                  { value: 'income', label: 'Income' },
+                  { value: 'saving', label: 'Savings' },
+                ]}
+              />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Select
+                label="Category filter"
+                value={draftFilters.category}
+                onChange={(category) => setDraftFilters({ ...draftFilters, category })}
+                options={['All', ...categories, 'Savings', 'Extra income', 'Bills'].map(
+                  (value) => ({ value, label: value }),
+                )}
+              />
+            </View>
           </View>
-          <Text style={u.body}>Log extra income only. Tap entries to edit.</Text>
-          {entries.length ? (
-            entries.map(entryRow)
-          ) : (
-            <Empty title="No matching entries" body="Change your search or add an entry." />
-          )}
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Field
+                label="From date"
+                value={draftFilters.from}
+                onChangeText={(from) => setDraftFilters({ ...draftFilters, from })}
+                placeholder="YYYY-MM-DD"
+              />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Field
+                label="To date"
+                value={draftFilters.to}
+                onChangeText={(to) => setDraftFilters({ ...draftFilters, to })}
+                placeholder="YYYY-MM-DD"
+              />
+            </View>
+          </View>
+          <Button
+            secondary
+            onPress={() => {
+              if (
+                (draftFilters.from && !validDate(draftFilters.from)) ||
+                (draftFilters.to && !validDate(draftFilters.to)) ||
+                (draftFilters.from && draftFilters.to && draftFilters.from > draftFilters.to)
+              ) {
+                setNotice('Enter a valid date range.');
+                return;
+              }
+              setFilters({ ...draftFilters });
+            }}
+          >
+            Apply filters
+          </Button>
+          {entries.length ? entries.map(entryRow) : <Text style={u.body}>No entries</Text>}
         </Card>
       </>
     );
   }
   function plan() {
+    if (!selectedPlan)
+      return (
+        <>
+          {heading(
+            'Plan & goals',
+            <Button
+              icon="add"
+              onPress={() =>
+                open('plan', { title: 'New plan', amount: '', percent: '30', planId: '' })
+              }
+            >
+              New plan
+            </Button>,
+          )}
+          <Card>
+            {s!.plans?.length ? (
+              s!.plans.map((item) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open plan ${item.name}`}
+                  onPress={() => setSelectedPlanId(item.id)}
+                  style={{
+                    paddingVertical: 16,
+                    borderBottomWidth: 1,
+                    borderColor: C.line,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                    <Text style={u.h2}>{item.name}</Text>
+                    <Text style={u.body}>{fmt(item.income)} / month</Text>
+                  </View>
+                  <Pill tone={item.status === 'active' ? 'green' : 'neutral'}>
+                    {item.status === 'active'
+                      ? 'Active'
+                      : item.status === 'draft'
+                        ? 'Draft'
+                        : 'Inactive'}
+                  </Pill>
+                  <Icon name="chevron-forward" size={18} color={C.muted} />
+                </Pressable>
+              ))
+            ) : (
+              <Text style={u.body}>No plans</Text>
+            )}
+          </Card>
+        </>
+      );
     return (
       <>
         {heading(
-          'Plan & goals',
+          selectedPlan.name,
           <View style={u.row}>
             <Button
               icon="create-outline"
               onPress={() =>
                 open('plan', {
-                  amount: String(s!.income / units(state.currency)),
-                  percent: String(s!.savePercent),
+                  existing: selectedPlan.id,
+                  title: selectedPlan.name,
+                  amount: String(state.income / units(state.currency)),
+                  percent: String(state.savePercent),
                 })
               }
             >
@@ -961,6 +1023,44 @@ function AppContent({ session }: { session: Session }) {
             </Button>
           </View>,
         )}
+        <View style={[u.between, { marginBottom: 20 }]}>
+          <Button small secondary onPress={() => setSelectedPlanId(null)}>
+            All plans
+          </Button>
+          <View style={u.row}>
+            <Pill tone={selectedPlan.status === 'active' ? 'green' : 'neutral'}>
+              {selectedPlan.status === 'active'
+                ? 'Active'
+                : selectedPlan.status === 'draft'
+                  ? 'Draft'
+                  : 'Inactive'}
+            </Pill>
+            <Button
+              small
+              secondary
+              onPress={() =>
+                update((old) =>
+                  setPlanStatus(
+                    old,
+                    selectedPlan.id,
+                    selectedPlan.status === 'active' ? 'inactive' : 'active',
+                  ),
+                )
+              }
+            >
+              {selectedPlan.status === 'active' ? 'Deactivate' : 'Activate'}
+            </Button>
+            {selectedPlan.status === 'inactive' && (
+              <Button
+                small
+                secondary
+                onPress={() => update((old) => setPlanStatus(old, selectedPlan.id, 'draft'))}
+              >
+                Move to draft
+              </Button>
+            )}
+          </View>
+        </View>
         {m.overcommitted && (
           <View style={st.warning}>
             <Text style={{ color: C.red }}>Bills exceed income by {fmt(m.fixed - m.income)}.</Text>
@@ -970,7 +1070,7 @@ function AppContent({ session }: { session: Session }) {
           <Card style={{ flex: columns ? 1 : undefined }}>
             <Text style={u.caption}>INCOME</Text>
             <Text style={u.h2}>Monthly take-home income</Text>
-            <Text style={u.amount}>{fmt(s!.income)}</Text>
+            <Text style={u.amount}>{fmt(state.income)}</Text>
             <Text style={u.body}>Extra income is added from Activity.</Text>
             <View style={u.divider} />
             <View style={u.between}>
@@ -993,13 +1093,15 @@ function AppContent({ session }: { session: Session }) {
               style={{ height: 16, flexDirection: 'row', borderRadius: 20, overflow: 'hidden' }}
             >
               <View
-                style={{ flex: Math.max(0.001, 100 - s!.savePercent), backgroundColor: C.ink }}
+                style={{ flex: Math.max(0.001, 100 - state.savePercent), backgroundColor: C.ink }}
               />
-              <View style={{ flex: Math.max(0.001, s!.savePercent), backgroundColor: '#B8D883' }} />
+              <View
+                style={{ flex: Math.max(0.001, state.savePercent), backgroundColor: '#B8D883' }}
+              />
             </View>
             <View style={u.between}>
-              <Text style={st.bold}>{100 - s!.savePercent}% spending</Text>
-              <Text style={st.bold}>{s!.savePercent}% savings</Text>
+              <Text style={st.bold}>{100 - state.savePercent}% spending</Text>
+              <Text style={st.bold}>{state.savePercent}% savings</Text>
             </View>
             <View style={u.between}>
               <Text style={u.amount}>{fmt(m.spendingBudget)}</Text>
@@ -1015,8 +1117,8 @@ function AppContent({ session }: { session: Session }) {
           </Button>
         </View>
         <Card>
-          {s!.bills.length ? (
-            s!.bills.map((b) => {
+          {state.bills.length ? (
+            state.bills.map((b) => {
               const applicable = m.bills.some((x) => x.id === b.id),
                 paid = m.entries.some((e) => e.billId === b.id);
               return (
@@ -1042,6 +1144,7 @@ function AppContent({ session }: { session: Session }) {
                       <Button
                         small
                         secondary
+                        disabled={selectedPlan.status !== 'active'}
                         onPress={() => {
                           update((old) => ({
                             ...old,
@@ -1124,7 +1227,7 @@ function AppContent({ session }: { session: Session }) {
                   ? 'Targets funded'
                   : !t.feasible
                     ? 'Insufficient income'
-                    : t.percent > s!.savePercent
+                    : t.percent > state.savePercent
                       ? 'Increase savings'
                       : 'Targets covered'}
               </Text>
@@ -1135,11 +1238,11 @@ function AppContent({ session }: { session: Session }) {
                 ? `Required savings: ${t.percent}%.`
                 : 'Targets exceed income. Reduce targets or extend deadlines.'}
             </Text>
-            {t.feasible && t.percent > s!.savePercent && (
+            {t.feasible && t.percent > state.savePercent && (
               <Button
                 small
                 onPress={() => {
-                  update((old) => ({ ...old, savePercent: t.percent }));
+                  changePlan((old) => ({ ...old, savePercent: t.percent }));
                   setNotice('Allocation updated.');
                 }}
               >
@@ -1162,13 +1265,6 @@ function AppContent({ session }: { session: Session }) {
             </Card>
           )}
         </View>
-        <Card style={{ marginTop: 20, backgroundColor: '#F0F2EB' }}>
-          <Text style={u.h2}>Calculation</Text>
-          <Text style={u.body}>
-            Monthly target = remaining amount ÷ months left. Goals share available savings.
-            Estimates exclude interest.
-          </Text>
-        </Card>
       </>
     );
   }
@@ -1207,7 +1303,11 @@ function AppContent({ session }: { session: Session }) {
               <Icon name="refresh-outline" size={20} color={C.muted} />
             </Pressable>
           </View>
-          <Text style={u.body}>Chat is sent to OpenAI. API charges apply.</Text>
+          <Text style={u.body}>
+            {state.aiMode === 'conversation'
+              ? 'Conversation · detailed answers'
+              : 'Planning · estimates and savings targets'}
+          </Text>
           <View style={u.divider} />
           <ScrollView
             ref={chatScroll}
@@ -1345,14 +1445,14 @@ function AppContent({ session }: { session: Session }) {
               <Icon name="sunny-outline" size={30} color={C.green} />
             </View>
             <Text style={u.h2}>Daily allowance</Text>
-            <Text style={[u.h1, { fontSize: 44 }]}>{fmt(m.daily)}</Text>
+            <Text style={[u.amount, { fontSize: 36, lineHeight: 48 }]}>{fmt(m.daily)}</Text>
             <Text style={u.body}>/ day · {m.days} days left</Text>
             <Text style={u.body}>Remaining spending ÷ days left.</Text>
             <View style={u.divider} />
             <Text style={u.h2}>Recurring bills</Text>
             <Text style={u.body}>
-              {s!.bills.filter((b) => b.recurring).length} monthly commitments ·{' '}
-              {fmt(s!.bills.filter((b) => b.recurring).reduce((a, b) => a + b.amount, 0) * 12)} a
+              {state.bills.filter((b) => b.recurring).length} monthly commitments ·{' '}
+              {fmt(state.bills.filter((b) => b.recurring).reduce((a, b) => a + b.amount, 0) * 12)} a
               year.
             </Text>
             <Button secondary onPress={() => setTab('Plan')}>
@@ -1390,13 +1490,207 @@ function AppContent({ session }: { session: Session }) {
     }
   }
   function settings() {
+    const currencies = state.preferredCurrencies || [state.currency];
+    const available = CURRENCIES.filter((currency) => !currencies.includes(currency));
     return (
       <>
         {heading('Settings')}
         <View style={{ gap: 20 }}>
           <Card>
+            <Text style={u.h2}>Currencies</Text>
+            <Text style={u.body}>Choose the currencies used for entries and reports.</Text>
+            {currencies.map((currency) => (
+              <View key={currency} style={[u.between, { flexWrap: 'nowrap', minHeight: 48 }]}>
+                <Text style={st.bold}>
+                  {currency}
+                  {currency === state.currency ? ' · Budget' : ''}
+                </Text>
+                {currency !== state.currency && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove currency ${currency}`}
+                    style={st.iconButton}
+                    onPress={() =>
+                      update((old) => ({
+                        ...old,
+                        preferredCurrencies: old.preferredCurrencies?.filter(
+                          (code) => code !== currency,
+                        ),
+                        displayCurrency:
+                          old.displayCurrency === currency ? old.currency : old.displayCurrency,
+                      }))
+                    }
+                  >
+                    <Icon name="remove-circle-outline" color={C.muted} />
+                  </Pressable>
+                )}
+              </View>
+            ))}
+            {available.length > 0 &&
+              (addingCurrency ? (
+                <CurrencyPicker
+                  label="Add currency"
+                  value=""
+                  currencies={[...available]}
+                  onChange={(currency) => {
+                    update((old) => ({
+                      ...old,
+                      preferredCurrencies: [
+                        ...(old.preferredCurrencies || [old.currency]),
+                        currency,
+                      ],
+                    }));
+                    setAddingCurrency(false);
+                  }}
+                />
+              ) : (
+                <Button secondary icon="add" onPress={() => setAddingCurrency(true)}>
+                  Add currency
+                </Button>
+              ))}
+            <CurrencyPicker
+              label="Display currency"
+              value={state.displayCurrency || state.currency}
+              currencies={currencies}
+              onChange={(displayCurrency) => update((old) => ({ ...old, displayCurrency }))}
+            />
+            {!(state.plans?.length || state.entries.length) && (
+              <CurrencyPicker
+                label="Budget currency"
+                value={state.currency}
+                currencies={currencies}
+                onChange={(currency) =>
+                  update((old) => ({ ...old, currency, displayCurrency: currency, fx: undefined }))
+                }
+              />
+            )}
+            <Text style={u.body}>
+              {state.fx
+                ? `${state.fx.source} · ${new Date(state.fx.fetchedAt).toLocaleTimeString()}`
+                : 'Rates unavailable'}
+              . Rates refresh every minute; saved conversions stay fixed.
+            </Text>
+            {!!fx.error && (
+              <Text accessibilityRole="alert" style={st.error}>
+                {fx.error}
+              </Text>
+            )}
+            <Button secondary disabled={fx.loading} onPress={() => void fx.refresh()}>
+              {fx.loading ? 'Refreshing…' : 'Refresh rates'}
+            </Button>
+          </Card>
+          <Card>
+            <Text style={u.h2}>Service region</Text>
+            <Text style={u.body}>
+              Where AI and exchange-rate requests are processed. Currency preferences stay the same.
+            </Text>
+            {Object.entries(regionEndpoints)
+              .filter(([, endpoint]) => !!endpoint)
+              .map(([region, endpoint]) => (
+                <Pressable
+                  key={region}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`Service region ${region}`}
+                  accessibilityState={{ checked: state.apiUrl === endpoint }}
+                  aria-checked={state.apiUrl === endpoint}
+                  onPress={() => {
+                    setUrl(endpoint!);
+                    update((old) => ({ ...old, apiUrl: validatedApiUrl(endpoint!) }));
+                  }}
+                  style={{
+                    minHeight: 56,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderColor: C.line,
+                  }}
+                >
+                  <Text style={st.bold}>
+                    {region === 'US' ? 'United States · Central' : 'Singapore'}
+                  </Text>
+                  <Icon
+                    name={state.apiUrl === endpoint ? 'radio-button-on' : 'radio-button-off'}
+                    color={state.apiUrl === endpoint ? C.green : C.muted}
+                  />
+                </Pressable>
+              ))}
+            {__DEV__ && (
+              <>
+                <Field label="Backend URL" value={url} onChangeText={setUrl} keyboardType="url" />
+                <Button secondary onPress={saveSettings}>
+                  Save connection
+                </Button>
+                <Button secondary disabled={checking} onPress={checkServer}>
+                  {checking ? 'Checking…' : 'Test backend'}
+                </Button>
+              </>
+            )}
+          </Card>
+          <Card>
+            <Text style={u.h2}>AI mode</Text>
+            {(
+              [
+                {
+                  value: 'planning',
+                  title: 'Planning',
+                  description:
+                    'Estimates costs and suggests savings goals. Uses a lower-cost model.',
+                },
+                {
+                  value: 'conversation',
+                  title: 'Conversation',
+                  description:
+                    'Uses a more capable model for detailed questions and complex decisions.',
+                },
+              ] as const
+            ).map((mode) => (
+              <Pressable
+                key={mode.value}
+                accessibilityRole="radio"
+                accessibilityLabel={`AI mode ${mode.title}`}
+                accessibilityState={{ checked: (state.aiMode || 'planning') === mode.value }}
+                aria-checked={(state.aiMode || 'planning') === mode.value}
+                onPress={() => update((old) => ({ ...old, aiMode: mode.value }))}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  paddingVertical: 12,
+                  borderBottomWidth: 1,
+                  borderColor: C.line,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                  <Text style={st.bold}>{mode.title}</Text>
+                  <Text style={u.body}>{mode.description}</Text>
+                </View>
+                <Icon
+                  name={
+                    (state.aiMode || 'planning') === mode.value
+                      ? 'radio-button-on'
+                      : 'radio-button-off'
+                  }
+                  color={C.green}
+                />
+              </Pressable>
+            ))}
+            <Text style={u.body}>
+              Applies to AI planner chat. Receipt OCR is separate; iPhone photos are read on-device.
+            </Text>
+            <View style={[u.between, { flexWrap: 'nowrap' }]}>
+              <Text style={[st.bold, { flex: 1 }]}>Web price research</Text>
+              <Switch
+                accessibilityLabel="Research prices on the web"
+                value={state.research}
+                onValueChange={(research) => update((old) => ({ ...old, research }))}
+                trackColor={{ true: C.green, false: C.line }}
+              />
+            </View>
+          </Card>
+          <Card>
             <Text style={u.h2}>Account</Text>
-            <Text style={u.body}>{session.email}</Text>
             <Button
               secondary
               onPress={() =>
@@ -1405,130 +1699,10 @@ function AppContent({ session }: { session: Session }) {
             >
               Sign out
             </Button>
-            <View style={u.row}>
-              <Button
-                small
-                secondary
-                onPress={() =>
-                  void sendVerification()
-                    .then(() => setNotice('Verification email sent.'))
-                    .catch((e) => setNotice(errorText(e)))
-                }
-              >
-                Verify email
-              </Button>
-              <Button
-                small
-                secondary
-                onPress={() =>
-                  void getAccessToken(true)
-                    .then(() => setNotice('Session refreshed.'))
-                    .catch((e) => setNotice(errorText(e)))
-                }
-              >
-                Refresh session
-              </Button>
-            </View>
-            <Text style={u.h2}>Service region</Text>
-            <View style={u.row}>
-              {Object.entries(regionEndpoints)
-                .filter(([, v]) => !!v)
-                .map(([region, endpoint]) => (
-                  <Button
-                    key={region}
-                    small
-                    secondary
-                    onPress={() => {
-                      setUrl(endpoint!);
-                      update((old) => ({ ...old, apiUrl: validatedApiUrl(endpoint!) }));
-                    }}
-                  >
-                    {region}
-                  </Button>
-                ))}
-            </View>
-            <Text style={u.h2}>AI mode</Text>
-            <View style={u.row}>
-              {(['planning', 'conversation'] as const).map((aiMode) => (
-                <Button
-                  key={aiMode}
-                  small
-                  secondary
-                  onPress={() => update((old) => ({ ...old, aiMode }))}
-                >
-                  {aiMode === 'planning' ? 'Planning' : 'Conversation'}
-                </Button>
-              ))}
-            </View>
-            {__DEV__ && (
-              <Field
-                label="Backend URL"
-                value={url}
-                onChangeText={setUrl}
-                keyboardType="url"
-                placeholder="http://192.168.1.10:8000"
-              />
-            )}
-            <View style={u.between}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={st.bold}>Research prices on the web</Text>
-              </View>
-              <Switch
-                accessibilityLabel="Research prices on the web"
-                value={s!.research}
-                onValueChange={(research) => update((old) => ({ ...old, research }))}
-                trackColor={{ true: C.green, false: C.line }}
-              />
-            </View>
-            <View style={[u.row, { flexWrap: 'wrap' }]}>
-              <Button onPress={saveSettings}>Save connection</Button>
-              <Button secondary disabled={checking} onPress={checkServer}>
-                {checking ? 'Checking…' : 'Test backend'}
-              </Button>
-            </View>
-          </Card>
-          <Card>
-            <Text style={u.h2}>Currencies</Text>
-            <Text style={u.body}>Budget: {state.currency}. Reports use the display currency.</Text>
-            <CurrencyPicker
-              label="Display currency"
-              value={state.displayCurrency || state.currency}
-              onChange={(displayCurrency) => update((old) => ({ ...old, displayCurrency }))}
-            />
-            <Text style={u.body}>
-              {state.fx?.base === state.currency
-                ? `${state.fx.source} market estimates · fetched ${new Date(state.fx.fetchedAt).toLocaleString()}`
-                : 'No exchange rates saved yet.'}
-            </Text>
-            {!!fx.error && (
-              <Text accessibilityRole="alert" style={st.error}>
-                {fx.error}
-              </Text>
-            )}
-            <Button secondary disabled={fx.loading} onPress={() => void fx.refresh()}>
-              {fx.loading ? 'Refreshing rates…' : 'Refresh rates'}
-            </Button>
-            <Text style={u.body}>
-              Refreshes every 60s. Estimated rates; fees excluded. Saved conversions stay fixed.
-            </Text>
-            {!(state.income || state.entries.length || state.bills.length || state.goals.length) ? (
-              <CurrencyPicker
-                label="Budget currency"
-                value={state.currency}
-                onChange={(currency) =>
-                  update((old) => ({ ...old, currency, displayCurrency: currency, fx: undefined }))
-                }
-              />
-            ) : (
-              <Text style={u.body}>Budget currency: {state.currency} (fixed).</Text>
-            )}
           </Card>
           <Card>
             <Text style={u.h2}>Local data</Text>
-            <Text style={u.body}>
-              Stored on this device. No cloud backup. Uninstalling or clearing storage may delete
-              data.
-            </Text>
+            <Text style={u.body}>Budgets are stored on this device.</Text>
             {!!storageError && (
               <Button secondary onPress={() => update((old) => ({ ...old }))}>
                 Retry saving local data
@@ -1536,16 +1710,25 @@ function AppContent({ session }: { session: Session }) {
             )}
             <Button
               secondary
+              danger
               onPress={() =>
                 setConfirm({
                   title: 'Reset this device’s budget?',
-                  body: 'This permanently removes local activity, goals, bills, conversations, on this account. It cannot be undone.',
+                  body: 'Deletes all local entries, plans, goals and conversations. This cannot be undone.',
                   action: () => {
                     void queue.current
                       .catch(() => {})
                       .then(() => {
                         receipts.clear(true);
-                        setS({ ...initialState, apiUrl: state.apiUrl, aiMode: state.aiMode });
+                        setS(
+                          migratePlans({
+                            ...initialState,
+                            apiUrl: state.apiUrl,
+                            aiMode: state.aiMode,
+                          }),
+                        );
+                        setSelectedPlanId(null);
+                        setSelectedDate(today());
                         setProposal(null);
                         setSources([]);
                         setTab('Overview');
@@ -1575,7 +1758,7 @@ function AppContent({ session }: { session: Session }) {
               ? tools()
               : settings();
   return (
-    <SafeAreaView style={st.safe} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={st.safe} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
       <View style={st.shell}>
         {wide && (
@@ -1606,7 +1789,6 @@ function AppContent({ session }: { session: Session }) {
               ))}
             </View>
             <View style={{ flex: 1 }} />
-            <Text style={[u.body, { padding: 12 }]}>Local storage · {s.currency}</Text>
           </View>
         )}
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -1618,6 +1800,7 @@ function AppContent({ session }: { session: Session }) {
               </View>
               <Pressable
                 accessibilityRole="button"
+                style={st.iconButton}
                 accessibilityLabel="Open settings"
                 onPress={() => setTab('Settings')}
               >
@@ -1636,45 +1819,27 @@ function AppContent({ session }: { session: Session }) {
             key={tab}
             testID="page-scroll"
             style={{ flex: 1 }}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
             contentContainerStyle={{
               padding: wide ? 32 : 16,
               paddingTop: wide ? 38 : 18,
-              paddingBottom: 38,
+              paddingBottom: Platform.OS === 'web' ? 24 : 12,
             }}
           >
             <View style={{ maxWidth: 1100, minWidth: 0, width: '100%', alignSelf: 'center' }}>
-              <View style={[u.row, { flexWrap: 'wrap', marginBottom: 20 }]}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Change display currency"
-                  onPress={() => setTab('Settings')}
-                  style={st.chip}
-                >
-                  <Text style={st.chipText}>
-                    Viewing {state.displayCurrency || state.currency} · Budget {state.currency} ⌄
-                  </Text>
-                </Pressable>
-                <Text style={u.body}>
-                  {(state.displayCurrency || state.currency) !== state.currency &&
-                  !rateFor(state.fx, state.currency, state.displayCurrency!)
-                    ? `Rate unavailable · totals shown in ${state.currency}`
-                    : state.fx
-                      ? `${fx.error || !freshQuote(state.fx) ? 'Cached' : 'Live estimate'} · fetched ${new Date(state.fx.fetchedAt).toLocaleTimeString()}`
-                      : fx.loading
-                        ? 'Fetching live rates…'
-                        : 'Rates unavailable · budget currency only'}
-                </Text>
-              </View>
               <PageContext.Provider value={renderPage}>
                 <Slot />
               </PageContext.Provider>
             </View>
           </ScrollView>
           {!wide && (
-            <View
+            <SafeAreaView
+              edges={['bottom']}
+              testID="bottom-navigation"
               style={{
-                minHeight: 70,
-                paddingVertical: 10,
+                paddingTop: 6,
+                paddingBottom: 0,
                 flexShrink: 0,
                 flexDirection: 'row',
                 borderTopWidth: 1,
@@ -1714,7 +1879,7 @@ function AppContent({ session }: { session: Session }) {
                     </Text>
                   </Pressable>
                 ))}
-            </View>
+            </SafeAreaView>
           )}
         </View>
       </View>
@@ -1735,7 +1900,10 @@ function AppContent({ session }: { session: Session }) {
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={st.overlay}
+          style={[
+            st.overlay,
+            { paddingTop: Math.max(16, insets.top), paddingBottom: Math.max(12, insets.bottom) },
+          ]}
         >
           <View style={st.modal} testID="budget-modal">
             <View
@@ -1779,59 +1947,91 @@ function AppContent({ session }: { session: Session }) {
                 <>
                   {!!scanNote && <Text style={u.body}>Receipt review: {scanNote}</Text>}
                   {form.type === 'entry' && (
-                    <View style={[u.row, { flexWrap: 'wrap' }]}>
-                      {(['expense', 'income', 'saving'] as Kind[]).map((kind) => (
-                        <Pressable
-                          accessibilityRole="button"
-                          key={kind}
-                          style={[st.chip, form.kind === kind && st.activeChip]}
-                          onPress={() => setForm({ ...form, kind })}
-                        >
-                          <Text style={st.chipText}>
-                            {kind === 'saving'
-                              ? 'Savings'
-                              : kind === 'income'
-                                ? 'Income'
-                                : 'Expense'}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
+                    <>
+                      <View
+                        testID="entry-amount-row"
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                      >
+                        <View style={{ width: 56 }}>
+                          <Select
+                            compact
+                            label="Entry type"
+                            value={form.kind}
+                            onChange={(kind) => setForm({ ...form, kind: kind as Kind })}
+                            options={
+                              form.kind === 'saving'
+                                ? [{ value: 'saving', label: '↗' }]
+                                : [
+                                    { value: 'expense', label: '−' },
+                                    { value: 'income', label: '+' },
+                                  ]
+                            }
+                          />
+                        </View>
+                        <TextInput
+                          accessibilityLabel="Amount"
+                          value={form.amount}
+                          onChangeText={(amount) => setForm({ ...form, amount })}
+                          keyboardType="decimal-pad"
+                          placeholder="0.00"
+                          placeholderTextColor={C.muted}
+                          style={[
+                            u.input,
+                            {
+                              flex: 1,
+                              width: undefined,
+                              fontSize: 22,
+                              lineHeight: 30,
+                              paddingHorizontal: 8,
+                            },
+                          ]}
+                        />
+                        <View style={{ width: 84 }}>
+                          <CurrencyPicker
+                            compact
+                            label="Entry currency"
+                            value={form.currency}
+                            currencies={[
+                              ...new Set([
+                                ...(state.preferredCurrencies || [state.currency]),
+                                ...(supportedCurrency(form.currency) ? [form.currency] : []),
+                              ]),
+                            ]}
+                            onChange={(currency) =>
+                              setForm({ ...form, currency, exchangeRate: '' })
+                            }
+                          />
+                        </View>
+                      </View>
+                      {!form.existing && !form.receiptId && (
+                        <Text style={u.body}>Today · {today()}</Text>
+                      )}
+                    </>
                   )}
-                  {form.type !== 'plan' && (
-                    <Field
-                      label="Name"
-                      value={form.title}
-                      onChangeText={(title) => setForm({ ...form, title })}
-                      placeholder={form.type === 'goal' ? 'Goal name' : 'Entry name'}
-                    />
-                  )}
-                  {form.type === 'entry' && (
-                    <CurrencyPicker
-                      label="Entry currency"
-                      value={form.currency}
-                      onChange={(currency) => setForm({ ...form, currency, exchangeRate: '' })}
-                    />
-                  )}
-                  <Text style={u.body}>
-                    Currency: {form.type === 'entry' ? form.currency : state.currency}
-                  </Text>
                   <Field
-                    label={
-                      form.type === 'plan'
-                        ? 'Monthly take-home income'
-                        : form.type === 'goal'
-                          ? 'Target amount'
-                          : 'Amount'
-                    }
-                    value={form.amount}
-                    onChangeText={(amount) => setForm({ ...form, amount })}
-                    keyboardType="decimal-pad"
-                    placeholder="0.00"
+                    label={form.type === 'plan' ? 'Plan name' : 'Name'}
+                    value={form.title}
+                    onChangeText={(title) => setForm({ ...form, title })}
+                    placeholder={form.type === 'entry' ? 'Optional' : 'Name'}
                   />
+                  {form.type !== 'entry' && (
+                    <Field
+                      label={
+                        form.type === 'plan'
+                          ? 'Monthly take-home income'
+                          : form.type === 'goal'
+                            ? 'Target amount'
+                            : 'Amount'
+                      }
+                      value={form.amount}
+                      onChangeText={(amount) => setForm({ ...form, amount })}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                    />
+                  )}
                   {foreignEntry && (
                     <Card style={{ padding: 16, backgroundColor: C.mint }}>
-                      <Text style={u.h2}>Review the conversion</Text>
+                      <Text style={u.h2}>Conversion</Text>
                       <Text style={u.body}>
                         {selectedRate && Number.isFinite(selectedRate) && selectedRate > 0
                           ? `1 ${form.currency} = ${selectedRate.toPrecision(7)} ${state.currency}`
@@ -1873,10 +2073,11 @@ function AppContent({ session }: { session: Session }) {
                           return null;
                         }
                       })()}
-                      <Text style={u.body}>Rate locks on save. Add bank fees separately.</Text>
                     </Card>
                   )}
-                  {form.type !== 'plan' && (
+                  {(form.type === 'goal' ||
+                    form.type === 'bill' ||
+                    (form.type === 'entry' && !!form.receiptId)) && (
                     <Field
                       label={form.type === 'goal' ? 'Deadline (YYYY-MM-DD)' : 'Date (YYYY-MM-DD)'}
                       value={form.date}
@@ -1885,46 +2086,20 @@ function AppContent({ session }: { session: Session }) {
                     />
                   )}
                   {form.type === 'entry' && form.kind === 'expense' && (
-                    <>
-                      <Label>Category</Label>
-                      <View style={[u.row, { flexWrap: 'wrap' }]}>
-                        {categories.map((category) => (
-                          <Pressable
-                            key={category}
-                            accessibilityRole="button"
-                            style={[st.chip, form.category === category && st.activeChip]}
-                            onPress={() => setForm({ ...form, category })}
-                          >
-                            <Text style={st.chipText}>{category}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </>
+                    <Select
+                      label="Category"
+                      value={form.category}
+                      options={categories.map((value) => ({ value, label: value }))}
+                      onChange={(category) => setForm({ ...form, category })}
+                    />
                   )}
                   {form.type === 'entry' && form.kind === 'saving' && (
-                    <>
-                      <Label>Savings goal</Label>
-                      <View style={{ gap: 8 }}>
-                        {s.goals.length ? (
-                          s.goals.map((g) => (
-                            <Pressable
-                              key={g.id}
-                              accessibilityRole="button"
-                              style={[st.chip, form.goalId === g.id && st.activeChip]}
-                              onPress={() => setForm({ ...form, goalId: g.id })}
-                            >
-                              <Text style={st.chipText}>
-                                {g.emoji} {g.title}
-                              </Text>
-                            </Pressable>
-                          ))
-                        ) : (
-                          <Text style={u.body}>
-                            Create a savings goal before adding a contribution.
-                          </Text>
-                        )}
-                      </View>
-                    </>
+                    <Select
+                      label="Savings goal"
+                      value={form.goalId}
+                      options={state.goals.map((g) => ({ value: g.id, label: g.title }))}
+                      onChange={(goalId) => setForm({ ...form, goalId })}
+                    />
                   )}
                   {form.type === 'bill' && (
                     <View style={u.between}>
@@ -1960,7 +2135,6 @@ function AppContent({ session }: { session: Session }) {
                         onChangeText={(percent) => setForm({ ...form, percent })}
                         keyboardType="decimal-pad"
                       />
-                      <Text style={u.body}>Applied after bills. The rest funds spending.</Text>
                     </>
                   )}
                   {!!formError && (
@@ -2038,6 +2212,7 @@ export default function App() {
 const st = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
   shell: { flex: 1, flexDirection: 'row' },
+  iconButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   loading: {
     flex: 1,
     justifyContent: 'center',
@@ -2127,9 +2302,16 @@ const st = StyleSheet.create({
     backgroundColor: '#fff',
     marginTop: 22,
   },
-  hero: { backgroundColor: C.ink, borderRadius: 23, padding: 25, gap: 15, minWidth: 0 },
+  hero: { backgroundColor: C.ink, borderRadius: 23, padding: 20, gap: 8, minWidth: 0 },
   heroBadge: { flexDirection: 'row', flexShrink: 1, gap: 5, alignItems: 'center' },
-  heroAmount: { fontSize: 49, fontWeight: '400', color: '#fff', letterSpacing: -2.4, marginTop: 8 },
+  heroAmount: {
+    fontWeight: '400',
+    color: '#fff',
+    letterSpacing: -1.5,
+    minWidth: 0,
+    maxWidth: '100%',
+    flexShrink: 1,
+  },
   heroLine: { height: 1, backgroundColor: '#466052', marginVertical: 3 },
   entry: { paddingVertical: 12, borderBottomWidth: 1, borderColor: '#F0F2EC' },
   entryIcon: {
@@ -2193,7 +2375,7 @@ const st = StyleSheet.create({
     borderRadius: 24,
     width: '100%',
     maxWidth: 500,
-    maxHeight: '90%',
+    maxHeight: '100%',
     overflow: 'hidden',
   },
   toast: {

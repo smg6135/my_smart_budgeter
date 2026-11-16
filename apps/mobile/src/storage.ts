@@ -3,10 +3,11 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { validatedApiUrl } from './lib/config';
 import { State, initialState } from './finance';
+import { migratePlans } from './plans';
 const storageKey = (uid: string) => 'pocket-budget.v2.' + encodeURIComponent(uid);
 export async function load(uid: string): Promise<State> {
   const raw = await AsyncStorage.getItem(storageKey(uid));
-  if (!raw) return { ...initialState };
+  if (!raw) return migratePlans({ ...initialState });
   const data = JSON.parse(raw);
   if (
     data.version !== 1 ||
@@ -20,7 +21,7 @@ export async function load(uid: string): Promise<State> {
   try {
     apiUrl = validatedApiUrl(account.apiUrl);
   } catch {}
-  return { ...initialState, ...account, apiUrl };
+  return migratePlans({ ...initialState, ...account, apiUrl });
 }
 export const persist = (s: State, uid: string) =>
   AsyncStorage.setItem(storageKey(uid), JSON.stringify(s));

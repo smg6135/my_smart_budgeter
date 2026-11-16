@@ -1,3 +1,4 @@
+import { addCurrency, newEntry, select, setBudget } from './helpers';
 import { expect, test } from './fixtures';
 const rates = {
   SGD: 1,
@@ -40,15 +41,17 @@ test('books original currency once, converts reports, and preserves expense audi
   await page.getByLabel('Monthly take-home income').fill('1000');
   await page.getByLabel('Savings percentage (0–100)').fill('30');
   await page.getByRole('button', { name: 'Save budget plan' }).click();
-  await page.getByRole('button', { name: 'Add expense', exact: true }).click();
+  await addCurrency(page, 'USD');
+  await newEntry(page);
   await page.getByLabel('Name', { exact: true }).fill('Dinner in New York');
   await page.getByLabel('Amount', { exact: true }).fill('75');
-  await page.getByRole('button', { name: 'Entry currency USD', exact: true }).click();
+  await select(page, 'Entry currency', 'SGD', 'USD');
   await expect(page.getByText('Budget impact: SGD 100.00')).toBeVisible();
   await page.getByRole('button', { name: 'Save entry' }).click();
+  await page.goto('/');
   await expect(page.getByText('$600.00', { exact: true })).toBeVisible();
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Display currency USD', exact: true }).click();
+  await select(page, 'Display currency', 'SGD', 'USD');
   await page.getByRole('button', { name: 'Overview', exact: true }).click();
   await expect(page.getByText('US$450.00', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Activity', exact: true }).click();
@@ -74,10 +77,11 @@ test('offline foreign entries need an explicit rate and missing rates never rela
     route.fulfill({ status: 503, json: { detail: 'Rates unavailable for this test.' } }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Add expense', exact: true }).click();
+  await addCurrency(page, 'USD');
+  await newEntry(page);
   await page.getByLabel('Name', { exact: true }).fill('Offline dinner');
   await page.getByLabel('Amount', { exact: true }).fill('10');
-  await page.getByRole('button', { name: 'Entry currency USD', exact: true }).click();
+  await select(page, 'Entry currency', 'SGD', 'USD');
   await page.getByRole('button', { name: 'Save entry' }).click();
   await expect(
     page.getByText('Refresh exchange rates or enter the rate charged by your bank before saving.'),
@@ -86,7 +90,7 @@ test('offline foreign entries need an explicit rate and missing rates never rela
   await expect(page.getByText('Budget impact: SGD 14.00')).toBeVisible();
   await page.getByRole('button', { name: 'Save entry' }).click();
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Display currency USD', exact: true }).click();
+  await select(page, 'Display currency', 'SGD', 'USD');
   await page.getByRole('button', { name: 'Overview', exact: true }).click();
   await expect(page.getByText('Rate unavailable · totals shown in SGD')).toBeVisible();
   await expect(page.getByText('-SGD 14.00', { exact: true })).toBeVisible();
@@ -95,14 +99,12 @@ test('offline foreign entries need an explicit rate and missing rates never rela
 test('sample budget keeps loaded rates and later quotes never rewrite saved expenses', async ({
   page,
 }) => {
-  await page.goto('/');
-  await expect(page.getByText(/Live estimate · fetched/)).toBeVisible();
-  await page.getByRole('button', { name: 'Try demo' }).click();
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await page.getByRole('button', { name: 'Add expense', exact: true }).click();
+  await setBudget(page);
+  await addCurrency(page, 'USD');
+  await newEntry(page);
   await page.getByLabel('Name', { exact: true }).fill('Foreign demo expense');
   await page.getByLabel('Amount', { exact: true }).fill('75');
-  await page.getByRole('button', { name: 'Entry currency USD', exact: true }).click();
+  await select(page, 'Entry currency', 'SGD', 'USD');
   await expect(page.getByText('Budget impact: SGD 100.00')).toBeVisible();
   await page.getByRole('button', { name: 'Save entry' }).click();
   await page.route('**/v1/fx/rates?base=SGD', (route) =>

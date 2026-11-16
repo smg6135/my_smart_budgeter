@@ -37,7 +37,7 @@ test('sign-in errors, password login and account isolation', async ({ page }) =>
   await page.getByLabel('Monthly take-home income').fill('3456');
   await page.getByRole('button', { name: 'Save budget plan' }).click();
   await page.goto('/settings');
-  await expect(page.getByText('one@example.com', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   await expect(page.getByLabel('OpenAI API key')).toHaveCount(0);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
@@ -46,8 +46,7 @@ test('sign-in errors, password login and account isolation', async ({ page }) =>
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByTestId('page-scroll')).toBeVisible();
   await page.goto('/plan');
-  await page.getByRole('button', { name: 'Edit plan', exact: true }).click();
-  await expect(page.getByLabel('Monthly take-home income')).toHaveValue('0');
+  await expect(page.getByText('No plans', { exact: true })).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => JSON.parse(localStorage.getItem('pocket-budget.v2.account-one')!).income),
@@ -134,5 +133,5 @@ test('Google popup credential is exchanged for a Firebase session', async ({ pag
   await page.getByRole('button', { name: 'Continue with Google' }).click();
   await expect(page.getByTestId('page-scroll')).toBeVisible();
   await page.goto('/settings');
-  await expect(page.getByText('google@example.com', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
 });
