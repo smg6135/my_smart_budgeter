@@ -46,7 +46,9 @@ npx eas-cli@latest build --platform ios --profile production
 npx eas-cli@latest submit --platform ios --profile production --latest
 ```
 
-Use your Apple Developer account when prompted. Let EAS manage signing or select your existing credentials. Optionally set `submit.production.ios.ascAppId` in `eas.json`. No signed build or upload has been made yet.
+Use your Apple Developer account when prompted. Let EAS manage signing or select your existing credentials. The existing app is configured in `submit.production.ios.ascAppId` in `eas.json`.
+
+Build 1.0.0 (2) includes the launch fix. Its signed iPhone binary contains the previously missing React Native class, and the Release simulator startup check now passes through to sign-in. Update the installed app through TestFlight when this build finishes Apple processing. Keep the existing installation to preserve device-local budgets.
 
 After processing, open App Store Connect → TestFlight → add the build to an internal test group. Install TestFlight on your phone and accept the invitation. External groups require Beta App Review. Uploading a build does not publish it to the App Store. [Expo submission](https://docs.expo.dev/submit/ios/), [TestFlight distribution](https://docs.expo.dev/submit/testflight/).
 

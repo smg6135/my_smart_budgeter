@@ -20,7 +20,7 @@ Live endpoints:
 
 Live checks passed for bulk OCR, single OCR, planning and conversation in both regions. Public HTTPS auth, FX, daily quota exhaustion and disabled-token rejection pass. A planning request with web search enabled also completed through the public Gateway.
 
-Production Firebase/OAuth and regional API values are prepared in the ignored `apps/mobile/.env.production`. See [TestFlight](TESTFLIGHT.md) for signing and upload. No signed iOS build has been uploaded. Google consent/native callbacks, camera, Keychain and PDF/batch behavior still need device checks.
+Production Firebase/OAuth and regional API values are prepared in the ignored `apps/mobile/.env.production`. See [TestFlight](TESTFLIGHT.md) for signing and upload. Signed iOS build 1 was uploaded; its launch crash is fixed in build 1.0.0 (2). Google consent/native callbacks, camera, Keychain and PDF/batch behavior still need device checks.
 
 Budgets remain device-local. Identity is global; usage counters and shared LiteLLM Postgres are in the US. Cloud SQL and Redis use single-instance MVP configurations. Regional compute does not guarantee regional data residency.
 
@@ -30,4 +30,6 @@ Dependency check: no high/critical npm advisories after compatible fixes; modera
 
 2026-11-15 HEIC update: HEIC/HEIF deployed to both regions through release PR #3. Verification: 46 backend tests, 22 TypeScript tests, browser CI (60 checks), lint/typecheck and Linux codec smoke passed. Real HEIC single/bulk OCR and the existing API acceptance checks passed in both regions.
 
-iOS OCR: Apple Vision module, local receipt parsing, batch queue/review, manual correction and explicit cloud confirmation implemented. Verification passed: three real Vision tests, iOS SDK typechecking, 35 TypeScript tests, 63 browser checks, lint/typecheck and an unsigned iOS app/bridge build in CI. A fresh signed native build and physical-device checks are still required. Android on-device OCR remains planned. See [receipt OCR](RECEIPT_OCR.md).
+iOS OCR: Apple Vision module, local receipt parsing, batch queue/review, manual correction and explicit cloud confirmation implemented. Verification passed: three real Vision tests, iOS SDK typechecking, 35 TypeScript tests, 63 browser checks, lint/typecheck and a Release iOS app/bridge build in CI. Physical-device checks are still required. Android on-device OCR remains planned. See [receipt OCR](RECEIPT_OCR.md).
+
+2026-11-16 iOS launch fix: the phone crash report and a Release simulator launch both identified a missing `RCTStatusBarAppearance` class. Expo-compatible React Native 0.88.1 and SDK package updates restore it. The corrected signed build 1.0.0 (2) has been built and queued for TestFlight upload. Native CI now checks Expo dependency compatibility and exercises an actual Release startup; the corrected Release app reached sign-in successfully in run [43879963062](https://github.com/smg6135/my_smart_budgeter/actions/runs/43879963062). Backend, infrastructure and mobile CI also pass. A compile-only check did not catch the original crash.
