@@ -42,6 +42,17 @@
       ],
       "expo-font"
     ],
-    "scheme": "pocketbudget"
+    "scheme": "pocketbudget",
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "165287c3-0bf6-4bc7-9772-d80583c9df04"
+      }
+    },
+    "owner": "mgsong19"
   }
 }

@@ -50,6 +50,8 @@ Use your Apple Developer account when prompted. Let EAS manage signing or select
 
 Build 1.0.0 (2) includes the launch fix. Its signed iPhone binary contains the previously missing React Native class, and the Release simulator startup check now passes through to sign-in. Update the installed app through TestFlight when this build finishes Apple processing. Keep the existing installation to preserve device-local budgets.
 
+The mobile redesign was built as 1.0.0 (3), but submission is pending. Work stopped at the user's request; see [mobile refinement handoff](MOBILE_REFINEMENT_PLAN.md) for validation results and remaining steps.
+
 After processing, open App Store Connect → TestFlight → add the build to an internal test group. Install TestFlight on your phone and accept the invitation. External groups require Beta App Review. Uploading a build does not publish it to the App Store. [Expo submission](https://docs.expo.dev/submit/ios/), [TestFlight distribution](https://docs.expo.dev/submit/testflight/).
 
 ## Device checks

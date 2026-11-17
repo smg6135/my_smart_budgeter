@@ -52,7 +52,7 @@ export function Select({
       <Modal
         visible={visible}
         transparent
-        animationType="slide"
+        animationType={Platform.OS === 'web' ? 'none' : 'slide'}
         onRequestClose={() => setVisible(false)}
       >
         <View

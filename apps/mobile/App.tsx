@@ -1892,7 +1892,7 @@ function AppContent({ session }: { session: Session }) {
       <Modal
         visible={!!form}
         transparent
-        animationType="fade"
+        animationType={Platform.OS === 'web' ? 'none' : 'fade'}
         onRequestClose={() => {
           setForm(null);
           setScanNote('');
@@ -2167,7 +2167,7 @@ function AppContent({ session }: { session: Session }) {
       <Modal
         visible={!!confirm}
         transparent
-        animationType="fade"
+        animationType={Platform.OS === 'web' ? 'none' : 'fade'}
         onRequestClose={() => setConfirm(null)}
       >
         <View style={st.overlay}>
