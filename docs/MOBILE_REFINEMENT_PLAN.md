@@ -1,3 +1,17 @@
+# Current release: free on-device classification
+
+Build **1.0.0 (8)** separates Vision OCR from Foundation Models AI. Receipts flow through OCR text → financial parsing/validation → AI category classification. Typed descriptions use the same AI service. There is no cloud/rules classification fallback; unavailable AI leaves receipt categories for manual selection. Amounts, currencies and balances remain code-calculated. Manual category choices take priority over later AI suggestions.
+
+The app now opens an account-free budget. Existing account budgets keep their original storage keys; the local budget has a separate namespace. FX uses the public Coinbase feed, without tokens or a hosted backend. Chat is on-device and has no live web price research. Legacy GCP resources remain separate and have not been deleted.
+
+Validation: 51 unit tests, 78 browser checks, three real Vision tests, lint/typecheck and Expo compatibility pass locally. [MVP CI](https://github.com/smg6135/my_smart_budgeter/actions/runs/44885225575) passes the main free-app change, backend and infrastructure checks. The signed binary is verified and its [TestFlight upload](https://expo.dev/accounts/mgsong19/projects/pocket-budget/submissions/17af4d71-ff42-4d69-af81-e75093716e01) finished. [Native CI](https://github.com/smg6135/my_smart_budgeter/actions/runs/44885223534) passes compilation of both modules and launch directly into the account-free budget.
+
+AI inference accuracy still needs an eligible physical iPhone (iOS 26+, Apple Intelligence enabled and model ready). Android/browser currently support manual budgeting. Other local AI candidates: merchant grouping, subscription labels and goal-intent tags. [Current OCR/AI workflow](RECEIPT_OCR.md).
+
+---
+
+## Previous interface release history
+
 # Mobile refinement
 
 Mobile refinement and the chat keyboard correction are implemented. Build 1.0.0 (5) is uploaded to TestFlight. Browser checks pass; the new native startup CI and physical iPhone acceptance are still pending.

@@ -7,7 +7,7 @@
 5. Allow account-free budgets and public key-free FX; preserve existing account data separately.
 6. Validate financial behavior, unsupported-device UX, native compilation and a new TestFlight binary.
 
-Steps 1–5 are implemented; validation/release is underway. See [workflow](RECEIPT_OCR.md). Legacy GCP resources remain separate and have not been deleted.
+Steps 1–6 are implemented. Local lint/typecheck, 51 unit tests, 78 browser checks and three real Vision tests pass. CI compiled the separate OCR/AI modules and launched the account-free budget successfully. Signed build 1.0.0 (8) is uploaded to TestFlight. Real model inference accuracy still needs an eligible physical iPhone. See [workflow](RECEIPT_OCR.md). Legacy GCP resources remain separate and have not been deleted.
 
 ---
 

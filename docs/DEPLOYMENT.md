@@ -1,6 +1,8 @@
-# GCP operations
+# Legacy GCP operations
 
-Live project: `normies-main`. Both Argo applications are synced and healthy.
+This cloud stack is optional legacy infrastructure. The current app uses on-device AI, direct public FX and optional account sign-in; it does not require this stack or call its paid model routes. Existing resources remain running and can incur hosting/provider charges until an operator retires them.
+
+Project: `normies-main`. The previous deployment/verification records below describe the cloud version.
 
 | Region | Cluster | API |
 | --- | --- | --- |
