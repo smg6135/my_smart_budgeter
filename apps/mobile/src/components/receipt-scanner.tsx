@@ -25,11 +25,13 @@ export function ReceiptScanner({
   state,
   saveAll,
   undo,
+  aiStatus,
 }: {
   batch: Batch;
   state: State;
   saveAll: () => void;
   undo?: () => void;
+  aiStatus?: string;
 }) {
   const insets = useSafeAreaInsets();
   const editorScroll = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -119,6 +121,7 @@ export function ReceiptScanner({
         )}
       </View>
       <Text style={u.body}>On-device OCR → AI classification · Up to 20 photos</Text>
+      {!!aiStatus && <Text style={u.body}>{aiStatus}</Text>}
       {batch.processing && (
         <View style={u.row}>
           <ActivityIndicator color={C.green} />

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { deviceAiAvailability } from '../lib/device-ai';
+import { deviceAiAvailability, subscribeDeviceAi, suspendDeviceAi } from '../lib/device-ai';
 import type { DeviceAiAvailability } from '../classification';
 export function useDeviceAi() {
   const [availability, setAvailability] = useState<DeviceAiAvailability>({
@@ -9,20 +9,31 @@ export function useDeviceAi() {
   });
   useEffect(() => {
     let mounted = true;
-    const refresh = () =>
-      void deviceAiAvailability().then((value) => {
-        if (mounted) setAvailability(value);
-      });
+    let checking = false;
+    const refresh = () => {
+      if (checking) return;
+      checking = true;
+      void deviceAiAvailability()
+        .then((value) => {
+          if (mounted) setAvailability(value);
+        })
+        .finally(() => {
+          checking = false;
+        });
+    };
     refresh();
     const timer = setInterval(() => {
       if (AppState.currentState === 'active' || AppState.currentState === null) refresh();
     }, 15000);
     const listener = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh();
+      else suspendDeviceAi();
     });
+    const unsubscribe = subscribeDeviceAi(refresh);
     return () => {
       mounted = false;
       listener.remove();
+      unsubscribe();
       clearInterval(timer);
     };
   }, []);

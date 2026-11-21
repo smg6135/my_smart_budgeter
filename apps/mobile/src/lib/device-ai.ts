@@ -6,7 +6,12 @@ import type {
 import type { RecognizedReceipt } from '../receipt-text';
 import type { ChatResult, ScanResult } from '../api';
 import type { Message } from '../finance';
-const reason = 'On-device AI is available in the iOS app on supported Apple Intelligence devices.';
+const reason =
+  'On-device AI is available in the iOS app on supported Apple Intelligence devices, or through a local model in the mobile app.';
+export const subscribeDeviceAi = (_listener: () => void) => () => {};
+export const downloadDeviceAi = async () => {};
+export const pauseDeviceAi = async () => {};
+export const suspendDeviceAi = () => {};
 export async function deviceAiAvailability(): Promise<DeviceAiAvailability> {
   return { available: false, reason };
 }

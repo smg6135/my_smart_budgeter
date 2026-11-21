@@ -1,1 +1,5 @@
-{ "platforms": ["ios"], "apple": { "modules": ["PocketDeviceAiModule"] } }
+{
+  "platforms": ["ios", "android"],
+  "apple": { "modules": ["PocketDeviceAiModule"] },
+  "android": { "modules": ["expo.modules.pocketdeviceai.PocketDeviceAiModule"] }
+}

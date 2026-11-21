@@ -1,5 +1,7 @@
 # Current implementation: free, on-device AI
 
+2026-11-21 update: available system AI first, then an automatic, in-app Qwen3 0.6B download on iOS/Android. Wi-Fi acquisition, explicit cellular download, pause/retry, SHA-256 verification, offline reuse and bounded local inference are implemented. [Research, implementation and checks](LOCAL_AI.md). The earlier no-alternative-model requirement below is superseded by this local-only fallback; cloud/rules classification remains disabled.
+
 1. Separate native OCR from the native AI service.
 2. Use the AI service for receipt and typed-entry categorization; preserve manual overrides.
 3. Remove cloud AI calls, cloud OCR controls and rules/parser classification fallback.

@@ -10,7 +10,7 @@ npm ci
 npm run web
 ```
 
-For a phone browser, run `npx expo start --web --host lan` and open the shown LAN address on the same Wi-Fi. Browser/Android currently offer manual budgeting. They do not call cloud AI when on-device AI is unavailable.
+For a phone browser, run `npx expo start --web --host lan` and open the shown LAN address on the same Wi-Fi. Browsers offer manual budgeting. Native AI requires a mobile build.
 
 ## Native iOS
 
@@ -23,7 +23,11 @@ npx eas-cli@latest build --platform ios --profile development
 npx expo start --dev-client --lan
 ```
 
-Apple Vision reads photos. Apple Foundation Models classifies the text and typed expenses, and runs chat. AI requires iOS 26+, supported Apple Intelligence hardware, enabled Apple Intelligence and ready model assets. Unsupported devices keep OCR/manual categories and budgeting; there is no substitute classifier or cloud upload.
+Apple Vision reads photos. Available Apple Foundation Models handles classification/chat on supported iOS 26+ devices. Otherwise Qwen3 0.6B downloads automatically on Wi-Fi (~484 MB), then runs offline. Check Settings → On-device AI for progress or pause/retry. Download now also allows mobile data. No restart, API key or cloud inference is needed. [Fallback details](LOCAL_AI.md).
+
+## Native Android
+
+Run `npm run prepare:local-ai`, then `npx expo run:android` with a current Android SDK/JDK 17. The native runtime supports 64-bit ARM devices and x86_64 emulators. Available Gemini Nano is preferred; otherwise the same local model installs inside the app. Receipt OCR remains iOS-only.
 
 ## TestFlight
 
@@ -45,9 +49,9 @@ Firebase/Google configuration is optional and only enables sign-in to existing a
 - Type “cinema tickets”, “taxi fare”, “groceries” and “coffee”; verify automatic categories on a supported device.
 - Change a suggested category manually while inference is pending. Your choice must remain.
 - Select receipt photos/HEIC batches in airplane mode. Check OCR → AI classification → auto-add and Undo.
-- Disable Apple Intelligence: OCR should work, category selection should be manual, and no upload control should appear.
+- Disable Apple Intelligence: install the local fallback on Wi-Fi, then verify offline OCR/classification. Paused or failed installation must leave manual categories usable.
 - Test missing dates/currencies, duplicate photos, exchange-rate overrides and edited expenses with Undo.
 - Check chat keyboard/caret/Send, narrow widths and large text. Chat has no live web prices.
 - Reopen existing local/account budgets and verify they remain separate.
 
-[Detailed OCR/AI workflow](RECEIPT_OCR.md). Real model accuracy still requires an eligible physical iPhone; simulator startup and mocked browser tests do not prove inference quality.
+[Detailed OCR/AI workflow](RECEIPT_OCR.md). System-model behavior and fallback latency/RAM still need physical-device checks; compilation, simulator startup and mocked browser tests do not prove those properties.

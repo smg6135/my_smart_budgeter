@@ -1,5 +1,7 @@
 # Current release: free on-device classification
 
+Current source now adds a downloaded Qwen3 0.6B fallback on iOS/Android when system AI is unavailable. It installs in-app, without restart; subsequent inference is offline. Android also detects available Gemini Nano. [Details and testing](LOCAL_AI.md). Build 8 below predates this runtime.
+
 Build **1.0.0 (8)** separates Vision OCR from Foundation Models AI. Receipts flow through OCR text → financial parsing/validation → AI category classification. Typed descriptions use the same AI service. There is no cloud/rules classification fallback; unavailable AI leaves receipt categories for manual selection. Amounts, currencies and balances remain code-calculated. Manual category choices take priority over later AI suggestions.
 
 The app now opens an account-free budget. Existing account budgets keep their original storage keys; the local budget has a separate namespace. FX uses the public Coinbase feed, without tokens or a hosted backend. Chat is on-device and has no live web price research. Legacy GCP resources remain separate and have not been deleted.

@@ -60,7 +60,7 @@ import { BudgetCalendar } from './src/components/budget-calendar';
 import { CurrencyPicker } from './src/components/currency-picker';
 import { load, persist, removeLegacyProviderKey } from './src/storage';
 import { ChatResult } from './src/api';
-import { chatOnDevice } from './src/lib/device-ai';
+import { chatOnDevice, downloadDeviceAi, pauseDeviceAi } from './src/lib/device-ai';
 import { useDeviceAi } from './src/hooks/use-device-ai';
 import { useEntryClassification } from './src/hooks/use-entry-classification';
 import { expenseCategories, applyCategorySuggestion } from './src/classification';
@@ -1507,6 +1507,7 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
               state={state}
               saveAll={saveReceipts}
               undo={receiptUndo ? undoReceipts : undefined}
+              aiStatus={!deviceAi.available ? deviceAi.reason : undefined}
             />
           </View>
           <Card style={{ flex: columns ? 1 : undefined, backgroundColor: C.mint }}>
@@ -1625,12 +1626,39 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
           <Card>
             <Text style={u.h2}>On-device AI</Text>
             <Text style={u.body}>
-              {deviceAi.available ? 'Available · Apple Intelligence' : deviceAi.reason}
+              {deviceAi.available
+                ? `Available · ${deviceAi.model || 'On-device AI'}`
+                : deviceAi.reason}
             </Text>
             <Text style={u.body}>
-              Categorizes entries and receipts after OCR. Chat stays on-device. No cloud AI or API
-              keys.
+              Categorizes entries and receipts after OCR. Chat stays on-device.
             </Text>
+            {deviceAi.provider === 'downloaded' && (
+              <>
+                <Text style={u.body}>
+                  Local model · 484 MB · Free · Works offline after download
+                </Text>
+                {deviceAi.download === 'downloading' || deviceAi.download === 'verifying' ? (
+                  <Button
+                    secondary
+                    onPress={() => void pauseDeviceAi().catch((e) => setNotice(errorText(e)))}
+                  >
+                    Pause download
+                  </Button>
+                ) : deviceAi.download !== 'ready' ? (
+                  <Button
+                    secondary
+                    onPress={() => void downloadDeviceAi().catch((e) => setNotice(errorText(e)))}
+                  >
+                    Download now · 484 MB
+                  </Button>
+                ) : null}
+                <Text style={u.body}>
+                  Downloads automatically on Wi-Fi. Download now also allows mobile data. Model:
+                  Qwen3 0.6B · Apache 2.0.
+                </Text>
+              </>
+            )}
           </Card>
           <Card>
             <Text style={u.h2}>Account</Text>

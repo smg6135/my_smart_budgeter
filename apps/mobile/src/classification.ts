@@ -8,7 +8,14 @@ export const expenseCategories = [
   'Other',
 ] as const;
 export type ExpenseCategory = (typeof expenseCategories)[number];
-export type DeviceAiAvailability = { available: boolean; reason?: string };
+export type DeviceAiAvailability = {
+  available: boolean;
+  reason?: string;
+  provider?: 'system' | 'downloaded';
+  model?: string;
+  download?: 'waiting' | 'downloading' | 'verifying' | 'ready' | 'paused' | 'error';
+  progress?: number;
+};
 export type Classification =
   | { status: 'classified'; category: ExpenseCategory; reason?: string }
   | { status: 'needs-input' | 'unavailable'; reason: string };
