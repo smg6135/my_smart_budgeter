@@ -214,10 +214,7 @@ export function ReceiptScanner({
             >
               {unresolved.map((job) => {
                 const draft = job.draft || receiptDraft(job.result);
-                let error =
-                  job.reviewError ||
-                  job.error ||
-                  (job.audit?.status !== 'classified' ? job.audit?.reason : '');
+                let error = job.reviewError || job.error || job.audit?.reason || '';
                 if (job.status !== 'error') {
                   try {
                     receiptEntry(job, state);

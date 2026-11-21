@@ -14,12 +14,16 @@ export function useDeviceAi() {
         if (mounted) setAvailability(value);
       });
     refresh();
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active' || AppState.currentState === null) refresh();
+    }, 15000);
     const listener = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh();
     });
     return () => {
       mounted = false;
       listener.remove();
+      clearInterval(timer);
     };
   }, []);
   return availability;

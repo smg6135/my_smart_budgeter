@@ -63,7 +63,7 @@ import { ChatResult } from './src/api';
 import { chatOnDevice } from './src/lib/device-ai';
 import { useDeviceAi } from './src/hooks/use-device-ai';
 import { useEntryClassification } from './src/hooks/use-entry-classification';
-import { expenseCategories } from './src/classification';
+import { expenseCategories, applyCategorySuggestion } from './src/classification';
 import { useReceipts } from './src/hooks/use-receipts';
 import { ReceiptScanner } from './src/components/receipt-scanner';
 import { prepareReceiptImport, undoReceiptImport, ReceiptJob } from './src/receipts';
@@ -168,16 +168,7 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
       form.kind === 'expense' &&
       !form.categoryEdited &&
       deviceAi.available,
-    (category, title) =>
-      setForm((old) =>
-        old &&
-        old.type === 'entry' &&
-        old.kind === 'expense' &&
-        !old.categoryEdited &&
-        old.title === title
-          ? { ...old, category }
-          : old,
-      ),
+    (category, title) => setForm((old) => applyCategorySuggestion(old, title, category)),
   );
   const queue = useRef(Promise.resolve()),
     chatScroll = useRef<React.ComponentRef<typeof ScrollView>>(null);

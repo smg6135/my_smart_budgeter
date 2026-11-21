@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { expenseCategories, validateClassification } from '../src/classification';
+import {
+  expenseCategories,
+  validateClassification,
+  applyCategorySuggestion,
+} from '../src/classification';
 
 test('classification accepts only the fixed category set, including a genuine Other decision', () => {
   for (const category of expenseCategories)
@@ -34,4 +38,26 @@ test('classification results never carry model-supplied amounts, dates or curren
     }),
     { status: 'classified', category: 'Entertainment' },
   );
+});
+
+test('late category suggestions preserve manual choices, newer descriptions and non-expense entries', () => {
+  const draft = {
+    type: 'entry',
+    kind: 'expense',
+    title: 'Taxi',
+    category: 'Other',
+    categoryEdited: false,
+    amount: '12.50',
+    currency: 'SGD',
+  };
+  assert.deepEqual(applyCategorySuggestion(draft, 'Taxi', 'Transport'), {
+    ...draft,
+    category: 'Transport',
+  });
+  assert.equal(applyCategorySuggestion(draft, 'Cinema', 'Entertainment'), draft);
+  const manual = { ...draft, category: 'Shopping', categoryEdited: true };
+  assert.equal(applyCategorySuggestion(manual, 'Taxi', 'Transport'), manual);
+  const income = { ...draft, kind: 'income' };
+  assert.equal(applyCategorySuggestion(income, 'Taxi', 'Transport'), income);
+  assert.equal(applyCategorySuggestion(null, 'Taxi', 'Transport'), null);
 });

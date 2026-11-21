@@ -31,3 +31,26 @@ export function validateClassification(value: unknown): Classification {
   }
   return { status: 'needs-input', reason: 'Choose a category.' };
 }
+
+type CategoryDraft = {
+  type: string;
+  kind: string;
+  title: string;
+  category: string;
+  categoryEdited: boolean;
+};
+export function applyCategorySuggestion<T extends CategoryDraft>(
+  draft: T | null,
+  requestedText: string,
+  category: ExpenseCategory,
+): T | null {
+  if (
+    !draft ||
+    draft.type !== 'entry' ||
+    draft.kind !== 'expense' ||
+    draft.categoryEdited ||
+    draft.title !== requestedText
+  )
+    return draft;
+  return { ...draft, category };
+}
