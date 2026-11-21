@@ -68,6 +68,8 @@ test('selection auto-analyzes, adds clear receipts, skips duplicate photos and s
   await entryCount(page, 3);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await entryCount(page, 2);
+  await expect(page.getByTestId('receipt-review')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Fix details (1)', exact: true })).toBeVisible();
   // Undo never starts another analysis or automatically re-adds the removed expense.
   await page.waitForTimeout(200);
   await entryCount(page, 2);

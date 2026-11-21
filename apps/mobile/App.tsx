@@ -509,6 +509,7 @@ function AppContent({ session }: { session: Session }) {
     if (!s || !receiptUndo) return;
     const undone = undoReceiptImport(s, receiptUndo.entries);
     setS(undone.state);
+    receipts.closeReview();
     receipts.restore(
       receiptUndo.jobs.filter((job) => undone.removed.includes(`receipt-${job.id}`)),
     );

@@ -126,8 +126,12 @@ export function ReceiptScanner({
         )}
       </View>
       <Text style={u.body}>
-        {batch.deviceOcr ? 'On-device · Photos stay on your iPhone' : 'Cloud analysis'} · Up to 20
-        photos
+        {batch.jobs.some((job) => job.engine === 'cloud')
+          ? 'Cloud analysis used'
+          : batch.deviceOcr
+            ? 'On-device by default'
+            : 'Cloud analysis'}{' '}
+        · Up to 20 photos
       </Text>
       {batch.processing && (
         <View style={u.row}>
