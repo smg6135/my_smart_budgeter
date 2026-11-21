@@ -1327,7 +1327,9 @@ function AppContent({ session }: { session: Session }) {
             ref={chatScroll}
             testID="page-scroll"
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            keyboardDismissMode={
+              Platform.OS === 'web' ? 'none' : Platform.OS === 'ios' ? 'interactive' : 'on-drag'
+            }
             contentInsetAdjustmentBehavior="never"
             automaticallyAdjustContentInsets={false}
             automaticallyAdjustKeyboardInsets={false}

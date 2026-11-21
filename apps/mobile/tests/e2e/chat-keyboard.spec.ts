@@ -50,10 +50,11 @@ test('chat composer stays visible while the viewport shrinks and history scrolls
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/planner');
+  await page.bringToFront();
   const input = page.getByLabel('Message your planner');
   await expect(input).toBeVisible();
   await settleChatLayout(page);
-  await input.focus();
+  await input.click();
   await expect(input).toBeFocused();
   const draft = Array.from({ length: 10 }, (_, i) => `Draft line ${i + 1}`).join('\n');
   await input.fill(draft);
@@ -70,9 +71,14 @@ test('chat composer stays visible while the viewport shrinks and history scrolls
       })
       .toBe(true);
     const before = await composer.boundingBox();
+    await input.click();
+    await expect(input).toBeFocused();
     await page.getByTestId('page-scroll').evaluate((element) => {
       element.scrollTop = 0;
     });
+    // Allow the scroll-end handler to run; it must not blur the composer.
+    await page.waitForTimeout(160);
+    await expect(input).toBeFocused();
     expect((await composer.boundingBox())!.y).toBeCloseTo(before!.y, 0);
     const [field, send] = await Promise.all([
       input.boundingBox(),
@@ -104,10 +110,11 @@ test('a long AI proposal cannot push the composer below the visible screen', asy
     }),
   );
   await page.goto('/planner');
+  await page.bringToFront();
   const input = page.getByLabel('Message your planner');
   await expect(input).toBeVisible();
   await settleChatLayout(page);
-  await input.focus();
+  await input.click();
   await expect(input).toBeFocused();
   await input.fill('Plan a trip');
   await expect(input).toHaveValue('Plan a trip');
