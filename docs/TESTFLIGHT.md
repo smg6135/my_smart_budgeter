@@ -47,7 +47,7 @@ npx eas-cli@latest submit --platform ios --profile production --latest
 
 Use your Apple Developer account when prompted. Let EAS manage signing or select your existing credentials. The existing app is configured in `submit.production.ios.ascAppId` in `eas.json`.
 
-Build **1.0.0 (4)** contains the mobile redesign, native gallery/wheel pickers and current Expo SDK 58 patches. Its signed iPhone binary passed version, camera/photo permission, URL scheme and required React Native startup-symbol checks. It was [uploaded to TestFlight](https://expo.dev/accounts/mgsong19/projects/pocket-budget/submissions/b7a52bf8-4fce-4c47-8204-5e25cb961777) on 2026-11-21. Update the existing installation when Apple processing finishes to preserve device-local budgets. See [mobile refinement](MOBILE_REFINEMENT_PLAN.md) for validation results.
+Build **1.0.0 (5)** adds the chat keyboard correction to the mobile redesign, native gallery/wheel pickers and current Expo SDK 58 patches. Its signed binary was checked for the new keyboard/composer code, bundle ID/version and required React Native startup symbol. It was [uploaded to TestFlight](https://expo.dev/accounts/mgsong19/projects/pocket-budget/submissions/65c8bb84-8862-4790-bcd4-aa8ca5109609) on 2026-11-21. Update the existing installation when Apple processing finishes to preserve device-local budgets. See [mobile refinement](MOBILE_REFINEMENT_PLAN.md) for validation results.
 
 After processing, open App Store Connect → TestFlight → add the build to an internal test group. Install TestFlight on your phone and accept the invitation. External groups require Beta App Review. Uploading a build does not publish it to the App Store. [Expo submission](https://docs.expo.dev/submit/ios/), [TestFlight distribution](https://docs.expo.dev/submit/testflight/).
 
@@ -60,6 +60,7 @@ The iOS receipt scanner includes a local Apple Vision module. Test image scans i
 - Camera, Photos gallery, HEIC batch scans, retry and receipt review.
 - Draft/activate/deactivate plans, Overview allocation and past calendar summaries.
 - Bottom safe area, horizontal statistics and uncropped daily allowance.
+- Chat: open the keyboard, type/edit a long multiline draft, scroll history, send a message and dismiss the keyboard. Input/caret/Send must remain visible; navigation should return after dismissal. Check a long AI proposal too.
 - Region selection through HTTPS Gateways.
 - No provider-key field; AI works with server credentials.
 - Signed-in offline budgets remain available; AI reports connection failures.
