@@ -11,6 +11,7 @@ export type Entry = {
   goalId?: string;
   billId?: string;
   original?: OriginalAmount;
+  receiptFingerprint?: string;
 };
 export type Bill = { id: string; title: string; amount: number; recurring: boolean; date: string };
 export type Goal = {

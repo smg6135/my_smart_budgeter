@@ -1,15 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
 import { request, ScanResult } from '../api';
 import { id, State } from '../finance';
-import { recognizeReceipt, deviceOcrAvailable } from '../lib/native-receipt-ocr';
+import {
+  recognizeReceipt,
+  reviewReceiptOnDevice,
+  deviceOcrAvailable,
+} from '../lib/native-receipt-ocr';
 import { processReceipt, type ReceiptEngine } from '../receipt-processor';
 import {
   ReceiptFile,
   ReceiptJob,
+  ReceiptDraft,
+  receiptDraft,
   RECEIPT_LIMIT,
   RECEIPT_MAX_BYTES,
   RECEIPT_MIME_TYPES,
@@ -19,50 +26,148 @@ import {
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Receipt failed. Retry.');
 async function fileData(file: ReceiptFile) {
   if ((file.size || 0) > RECEIPT_MAX_BYTES) throw new Error('File exceeds 8 MB.');
-  if (!RECEIPT_MIME_TYPES.includes(file.mime))
-    throw new Error('Use JPG, PNG, WEBP, HEIC, HEIF or PDF.');
+  if (!RECEIPT_MIME_TYPES.includes(file.mime)) throw new Error('Unsupported receipt format.');
   if (Platform.OS === 'web') {
     const blob = await (await fetch(file.uri)).blob();
     if (blob.size > RECEIPT_MAX_BYTES) throw new Error('File exceeds 8 MB.');
-    return await new Promise<string>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result).split(',')[1]);
       reader.onerror = () => reject(new Error('Cannot read file.'));
       reader.readAsDataURL(blob);
     });
   }
-  const nativeFile = new File(file.uri);
-  if (nativeFile.size > RECEIPT_MAX_BYTES) throw new Error('File exceeds 8 MB.');
-  return nativeFile.base64();
+  const fileOnDevice = new File(file.uri);
+  if (fileOnDevice.size > RECEIPT_MAX_BYTES) throw new Error('File exceeds 8 MB.');
+  return fileOnDevice.base64();
 }
-export function useReceipts(state: State | null, notify: (text: string) => void) {
+export function useReceipts(
+  state: State | null,
+  notify: (text: string) => void,
+  onAnalyzed: (jobs: ReceiptJob[]) => void,
+) {
   const [jobs, setJobs] = useState<ReceiptJob[]>([]),
-    [processing, setProcessing] = useState(false);
+    [processing, setProcessing] = useState(false),
+    [completedBatch, setCompletedBatch] = useState(0),
+    [dismissedBatch, setDismissedBatch] = useState(0);
+  const jobsRef = useRef<ReceiptJob[]>([]),
+    stateRef = useRef(state),
+    completedRef = useRef(onAnalyzed);
+  useLayoutEffect(() => {
+    stateRef.current = state;
+    completedRef.current = onAnalyzed;
+  }, [state, onAnalyzed]);
   const active = useRef(false),
     mounted = useRef(true),
     generation = useRef(0),
     picking = useRef(false);
   useEffect(() => {
     mounted.current = true;
+    const lifecycle = generation;
     return () => {
       mounted.current = false;
+      lifecycle.current++;
     };
   }, []);
+  function change(fn: (old: ReceiptJob[]) => ReceiptJob[]) {
+    if (!mounted.current) return;
+    jobsRef.current = fn(jobsRef.current);
+    setJobs(jobsRef.current);
+  }
   const patch = (jobId: string, update: Partial<ReceiptJob>) =>
-    setJobs((old) => old.map((j) => (j.id === jobId ? { ...j, ...update } : j)));
+    change((old) => old.map((j) => (j.id === jobId ? { ...j, ...update } : j)));
+  async function analyze(targets: ReceiptJob[], engine: ReceiptEngine) {
+    if (active.current || !stateRef.current || !targets.length) return;
+    const epoch = ++generation.current,
+      targetIds = new Set(targets.map((j) => j.id));
+    const seen = new Set(
+      [
+        ...stateRef.current.entries.map((entry) => entry.receiptFingerprint),
+        ...jobsRef.current
+          .filter((j) => !targetIds.has(j.id) && j.status !== 'duplicate')
+          .map((j) => j.fingerprint),
+      ].filter(Boolean),
+    );
+    active.current = true;
+    setProcessing(true);
+    try {
+      await runReceiptQueue(
+        targets,
+        async (job) => {
+          if (!mounted.current || generation.current !== epoch) return;
+          patch(job.id, { status: 'processing', error: undefined, reviewError: undefined });
+          try {
+            const data = await fileData(job);
+            // Secure contexts/native support hashing. An insecure LAN browser can still scan.
+            const fingerprint = await Crypto.digestStringAsync(
+              Crypto.CryptoDigestAlgorithm.SHA256,
+              data,
+            )
+              .then((value) => 'b64sha256:' + value)
+              .catch(() => undefined);
+            if (!mounted.current || generation.current !== epoch) return;
+            if (fingerprint && seen.has(fingerprint)) {
+              patch(job.id, { status: 'duplicate', fingerprint });
+              return;
+            }
+            if (fingerprint) seen.add(fingerprint);
+            const output = await processReceipt(job, engine, {
+              recognize: recognizeReceipt,
+              review: reviewReceiptOnDevice,
+              cloud: async (file) => {
+                if (!mounted.current || generation.current !== epoch || !stateRef.current)
+                  throw new Error('Scan cancelled.');
+                return request<ScanResult>(stateRef.current, '/v1/receipts/scan', {
+                  data,
+                  mime: file.mime,
+                  mode: targets.length > 1 ? 'bulk' : 'single',
+                });
+              },
+            });
+            if (mounted.current && generation.current === epoch)
+              patch(job.id, {
+                status: 'ready',
+                ...output,
+                fingerprint,
+                draft: receiptDraft(output.result),
+              });
+          } catch (e) {
+            if (mounted.current && generation.current === epoch)
+              patch(job.id, {
+                status: job.result ? 'ready' : 'error',
+                error: message(e),
+                needsReview: true,
+              });
+          }
+        },
+        engine === 'device' ? 1 : 2,
+      );
+      if (mounted.current && generation.current === epoch) {
+        completedRef.current(jobsRef.current.filter((j) => targetIds.has(j.id)));
+        setCompletedBatch((old) => old + 1);
+      }
+    } catch (e) {
+      if (mounted.current) notify(message(e));
+    } finally {
+      if (generation.current === epoch) {
+        active.current = false;
+        if (mounted.current) setProcessing(false);
+      }
+    }
+  }
   async function choose(camera = false) {
     if (active.current || picking.current) return;
     picking.current = true;
     try {
-      let files: ReceiptFile[] = [];
-      if (jobs.length >= RECEIPT_LIMIT)
-        throw new Error(`Maximum ${RECEIPT_LIMIT} receipts. Clear saved files first.`);
+      const unresolved = jobsRef.current.filter((j) => !['saved', 'duplicate'].includes(j.status));
+      if (unresolved.length >= RECEIPT_LIMIT)
+        throw new Error(`Finish or discard the ${RECEIPT_LIMIT} open receipts first.`);
+      let files: ReceiptFile[];
       if (camera) {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) throw new Error('Allow camera access to scan receipts.');
       }
       if (Platform.OS === 'web' && !camera) {
-        // Browser file inputs preserve HEIC files with generic MIME types.
         const result = await DocumentPicker.getDocumentAsync({
           type: RECEIPT_MIME_TYPES.filter((mime) => mime.startsWith('image/')),
           multiple: true,
@@ -81,7 +186,7 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
           : await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ['images'],
               allowsMultipleSelection: true,
-              selectionLimit: RECEIPT_LIMIT - jobs.length,
+              selectionLimit: RECEIPT_LIMIT - unresolved.length,
               orderedSelection: true,
               preferredAssetRepresentationMode:
                 ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current,
@@ -95,11 +200,14 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
           size: asset.fileSize,
         }));
       }
-      if (files.length + jobs.length > RECEIPT_LIMIT)
-        throw new Error(`Maximum ${RECEIPT_LIMIT} receipts. Clear saved files first.`);
-      setJobs((old) => [...old, ...files.map((file) => ({ ...file, status: 'pending' as const }))]);
+      if (files.length + unresolved.length > RECEIPT_LIMIT)
+        throw new Error(`Maximum ${RECEIPT_LIMIT} receipts at a time.`);
+      if (!mounted.current) return;
+      const selected: ReceiptJob[] = files.map((file) => ({ ...file, status: 'pending' }));
+      change(() => [...unresolved, ...selected]);
+      await analyze(selected, Platform.OS === 'ios' ? 'device' : 'cloud');
     } catch (e) {
-      notify(message(e));
+      if (mounted.current) notify(message(e));
     } finally {
       picking.current = false;
     }
@@ -108,70 +216,69 @@ export function useReceipts(state: State | null, notify: (text: string) => void)
     jobId?: string,
     engine: ReceiptEngine = Platform.OS === 'ios' ? 'device' : 'cloud',
   ) {
-    if (active.current || !state) return;
-    const pending = jobs.filter((j) =>
+    const targets = jobsRef.current.filter((j) =>
       jobId
         ? j.id === jobId && ['pending', 'error', 'ready'].includes(j.status)
         : j.status === 'pending',
     );
-    if (!pending.length) return;
-    const epoch = ++generation.current;
-    active.current = true;
-    setProcessing(true);
-    await runReceiptQueue(pending, async (job) => {
-      if (!mounted.current || generation.current !== epoch) return;
-      patch(job.id, { status: 'processing', error: undefined });
-      try {
-        const output = await processReceipt(job, engine, {
-          recognize: recognizeReceipt,
-          cloud: async (file) => {
-            const data = await fileData(file);
-            if (!mounted.current || generation.current !== epoch)
-              throw new Error('Scan cancelled.');
-            return request<ScanResult>(state, '/v1/receipts/scan', {
-              data,
-              mime: file.mime,
-              mode: pending.length > 1 ? 'bulk' : 'single',
-            });
-          },
-        });
-        if (mounted.current && generation.current === epoch)
-          patch(job.id, { status: 'ready', ...output, reviewError: undefined });
-      } catch (e) {
-        if (mounted.current && generation.current === epoch)
-          patch(job.id, { status: job.result ? 'ready' : 'error', error: message(e) });
-      }
-    });
-    if (generation.current === epoch) {
-      active.current = false;
-      if (mounted.current) setProcessing(false);
-    }
+    await analyze(targets, engine);
   }
   return {
     jobs,
     deviceOcr: Platform.OS === 'ios',
     deviceOcrAvailable,
     processing,
+    completedBatch,
+    reviewRequested: completedBatch > dismissedBatch,
+    openReview: () => setDismissedBatch(completedBatch - 1),
+    closeReview: () => setDismissedBatch(completedBatch),
     choose,
     process,
     patch,
-    markSaved: (ids: string[]) =>
-      setJobs((old) =>
+    improve: () =>
+      analyze(
+        jobsRef.current.filter((j) => ['ready', 'error'].includes(j.status)),
+        'cloud',
+      ),
+    patchDraft: (jobId: string, values: Partial<ReceiptDraft>) =>
+      change((old) =>
         old.map((j) =>
-          ids.includes(j.id)
-            ? { ...j, status: 'saved' as const, error: undefined, reviewError: undefined }
+          j.id === jobId
+            ? {
+                ...j,
+                draft: { ...(j.draft || receiptDraft(j.result)), ...values },
+                status: 'ready',
+                needsReview: true,
+                error: undefined,
+                reviewError: undefined,
+              }
             : j,
         ),
       ),
+    markSaved: (ids: string[]) =>
+      change((old) =>
+        old.map((j) =>
+          ids.includes(j.id)
+            ? { ...j, status: 'saved', error: undefined, reviewError: undefined }
+            : j,
+        ),
+      ),
+    markDuplicate: (ids: string[]) =>
+      change((old) => old.map((j) => (ids.includes(j.id) ? { ...j, status: 'duplicate' } : j))),
+    restore: (items: ReceiptJob[]) =>
+      change((old) => [
+        ...old.filter((j) => !items.some((item) => item.id === j.id)),
+        ...items.map((j) => ({ ...j, status: 'ready' as const, needsReview: true })),
+      ]),
     remove: (jobId: string) => {
-      if (!active.current) setJobs((old) => old.filter((j) => j.id !== jobId));
+      if (!active.current) change((old) => old.filter((j) => j.id !== jobId));
     },
     clear: (force = false) => {
       if (!active.current || force) {
         generation.current++;
         active.current = false;
         setProcessing(false);
-        setJobs([]);
+        change(() => []);
       }
     },
   };

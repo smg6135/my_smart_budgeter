@@ -63,7 +63,7 @@ import { load, persist, removeLegacyProviderKey } from './src/storage';
 import { chat, ChatResult } from './src/api';
 import { useReceipts } from './src/hooks/use-receipts';
 import { ReceiptScanner } from './src/components/receipt-scanner';
-import { receiptEntry } from './src/receipts';
+import { prepareReceiptImport, undoReceiptImport, ReceiptJob } from './src/receipts';
 import {
   Button,
   C,
@@ -161,7 +161,10 @@ function AppContent({ session }: { session: Session }) {
     [url, setUrl] = useState(''),
     [checking, setChecking] = useState(false),
     [scanNote, setScanNote] = useState('');
-  const receipts = useReceipts(s, setNotice);
+  const [receiptUndo, setReceiptUndo] = useState<{ entries: Entry[]; jobs: ReceiptJob[] } | null>(
+    null,
+  );
+  const receipts = useReceipts(s, setNotice, (jobs) => addReceiptJobs(jobs, true));
   const queue = useRef(Promise.resolve()),
     chatScroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
   useEffect(() => {
@@ -331,6 +334,9 @@ function AppContent({ session }: { session: Session }) {
             (f.kind === 'expense' ? f.category : f.kind === 'income' ? 'Income' : 'Savings'),
           amount: booked,
           ...(original ? { original } : {}),
+          ...(existing?.receiptFingerprint
+            ? { receiptFingerprint: existing.receiptFingerprint }
+            : {}),
           date: f.date,
           kind: f.kind,
           category:
@@ -464,57 +470,50 @@ function AppContent({ session }: { session: Session }) {
       setBusy(false);
     }
   }
-  function reviewReceipt(jobId: string) {
-    const job = receipts.jobs.find((j) => j.id === jobId);
-    if (!job || (job.status !== 'ready' && !(receipts.deviceOcr && job.status === 'error'))) return;
-    const r = job.result || {
-      merchant: '',
-      amount: 0,
-      currency: '',
-      date: '',
-      category: 'Other',
-      notes: 'Enter receipt details manually.',
-    };
-    setScanNote(r.notes);
-    open('entry', {
-      receiptId: jobId,
-      title: r.merchant,
-      amount: (() => {
-        if (r.amount <= 0) return '';
-        try {
-          parseAmount(String(r.amount), r.currency);
-          return r.amount.toFixed(decimals(r.currency));
-        } catch {
-          return String(r.amount);
-        }
-      })(),
-      currency: r.currency,
-      date: r.date,
-      category: r.category,
+  function addReceiptJobs(jobs: ReceiptJob[], automatic = false) {
+    if (!s) return;
+    const prepared = prepareReceiptImport(jobs, s, automatic);
+    for (const [jobId, reviewError] of Object.entries(prepared.errors)) {
+      receipts.patch(jobId, { reviewError, needsReview: true });
+    }
+    receipts.markDuplicate(prepared.duplicates);
+    if (!prepared.entries.length) return;
+    update((old) => ({
+      ...old,
+      entries: [
+        ...prepared.entries.filter(
+          (entry) =>
+            !old.entries.some(
+              (existing) =>
+                existing.id === entry.id ||
+                (!!entry.receiptFingerprint &&
+                  existing.receiptFingerprint === entry.receiptFingerprint),
+            ),
+        ),
+        ...old.entries,
+      ],
+    }));
+    receipts.markSaved(prepared.saved);
+    setReceiptUndo({
+      entries: prepared.entries,
+      jobs: jobs.filter((job) => prepared.saved.includes(job.id)),
     });
+    setNotice(
+      `Added ${prepared.entries.length} expense${prepared.entries.length === 1 ? '' : 's'}.`,
+    );
   }
   function saveReceipts() {
-    const entries: Entry[] = [],
-      saved: string[] = [];
-    for (const job of receipts.jobs.filter((j) => j.status === 'ready')) {
-      try {
-        entries.push(receiptEntry(job, state));
-        saved.push(job.id);
-      } catch (e) {
-        receipts.patch(job.id, { reviewError: errorText(e) });
-      }
-    }
-    if (entries.length) {
-      update((old) => ({
-        ...old,
-        entries: [
-          ...entries.filter((e) => !old.entries.some((x) => x.id === e.id)),
-          ...old.entries,
-        ],
-      }));
-      receipts.markSaved(saved);
-      setNotice(`${saved.length} receipts saved.`);
-    }
+    addReceiptJobs(receipts.jobs);
+  }
+  function undoReceipts() {
+    if (!s || !receiptUndo) return;
+    const undone = undoReceiptImport(s, receiptUndo.entries);
+    setS(undone.state);
+    receipts.restore(
+      receiptUndo.jobs.filter((job) => undone.removed.includes(`receipt-${job.id}`)),
+    );
+    setReceiptUndo(null);
+    setNotice(undone.removed.length ? 'Receipt expenses removed.' : 'Edited expenses kept.');
   }
   function editEntry(e: Entry) {
     if (e.billId) {
@@ -1489,7 +1488,12 @@ function AppContent({ session }: { session: Session }) {
         {heading('Tools')}
         <View style={[st.grid, { flexDirection: columns ? 'row' : 'column' }]}>
           <View style={{ flex: columns ? 1 : undefined, minWidth: 0 }}>
-            <ReceiptScanner batch={receipts} review={reviewReceipt} saveAll={saveReceipts} />
+            <ReceiptScanner
+              batch={receipts}
+              state={state}
+              saveAll={saveReceipts}
+              undo={receiptUndo ? undoReceipts : undefined}
+            />
           </View>
           <Card style={{ flex: columns ? 1 : undefined, backgroundColor: C.mint }}>
             <View style={st.toolIcon}>
@@ -1771,6 +1775,7 @@ function AppContent({ session }: { session: Session }) {
                       .catch(() => {})
                       .then(() => {
                         receipts.clear(true);
+                        setReceiptUndo(null);
                         setS(
                           migratePlans({
                             ...initialState,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Keyboard, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, C, Icon, Label, styles as u } from './ui';
@@ -28,6 +28,7 @@ export function Select({
         accessibilityRole="button"
         accessibilityLabel={`${label} ${selected?.label || 'Select'}`}
         onPress={() => {
+          Keyboard.dismiss();
           setDraft(value || options[0]?.value);
           setVisible(true);
         }}

@@ -120,7 +120,7 @@ test('AI gateway conversation, source links, and reviewable goal', async ({ page
   await openPlan(page);
   await expect(page.getByText('Living room TV', { exact: true })).toBeVisible();
 });
-test('gallery receipt upload is reviewed before being saved', async ({ page }) => {
+test('gallery receipt upload auto-adds a clear receipt', async ({ page }) => {
   await page.route('**/v1/receipts/scan', (route) =>
     route.fulfill({
       json: {
@@ -129,7 +129,7 @@ test('gallery receipt upload is reviewed before being saved', async ({ page }) =
         currency: 'SGD',
         date: '2026-01-10',
         category: 'Food & drinks',
-        notes: 'Check the printed date.',
+        notes: '',
       },
     }),
   );
@@ -146,11 +146,7 @@ test('gallery receipt upload is reviewed before being saved', async ({ page }) =
       'base64',
     ),
   });
-  await page.getByRole('button', { name: 'Process receipts (1)', exact: true }).click();
-  await page.getByRole('button', { name: 'Review receipt.png', exact: true }).click();
-  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Little Cafe');
-  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('12.50');
-  await page.getByRole('button', { name: 'Save entry' }).click();
+  await expect(page.getByText('Added 1 expense', { exact: true })).toBeVisible();
   await page.goto('/activity');
   await expect(page.getByRole('button', { name: 'Edit Little Cafe', exact: true })).toBeVisible();
 });

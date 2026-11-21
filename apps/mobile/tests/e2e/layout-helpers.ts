@@ -2,7 +2,7 @@ export async function textProblems(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
     const texts: { text: string; rect: DOMRect; raw: DOMRect; el: Element }[] = [];
     const walker = document.createTreeWalker(
-      document.querySelector('[data-testid="budget-modal"]') || document.body,
+      document.querySelector('[data-testid="budget-modal"], [data-testid="receipt-review"]') || document.body,
       NodeFilter.SHOW_TEXT,
     );
     while (walker.nextNode()) {

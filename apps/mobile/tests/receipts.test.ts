@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { receiptEntry, receiptMime, ReceiptJob, runReceiptQueue } from '../src/receipts';
+import {
+  receiptEntry,
+  receiptMime,
+  receiptDraft,
+  prepareReceiptImport,
+  undoReceiptImport,
+  ReceiptJob,
+  runReceiptQueue,
+} from '../src/receipts';
 import { initialState, today } from '../src/finance';
 const job: ReceiptJob = {
   id: 'r',
@@ -76,4 +84,56 @@ test('batch queue limits concurrency and processes every item', async () => {
   });
   assert.equal(max, 2);
   assert.deepEqual(processed.sort(), [1, 2, 3, 4, 5]);
+});
+
+test('automatic import skips uncertainty and invalid fields, and deduplicates exact images', () => {
+  const clear = { ...job, fingerprint: 'photo-a', needsReview: false };
+  const uncertain = { ...job, id: 'uncertain', needsReview: true };
+  const invalid = { ...job, id: 'invalid', result: { ...job.result!, date: '2099-01-01' } };
+  const duplicate = { ...clear, id: 'duplicate' };
+  const samePurchase = { ...clear, id: 'separate-photo', fingerprint: 'photo-b' };
+  const batch = prepareReceiptImport(
+    [clear, uncertain, invalid, duplicate, samePurchase],
+    initialState,
+    true,
+  );
+  assert.deepEqual(batch.saved, ['r', 'separate-photo']);
+  assert.deepEqual(batch.duplicates, ['duplicate']);
+  assert.match(batch.errors.invalid, /date/);
+  assert.equal(batch.errors.uncertain, undefined);
+  const again = prepareReceiptImport(
+    [clear, duplicate],
+    { ...initialState, entries: batch.entries },
+    true,
+  );
+  assert.equal(again.entries.length, 0);
+  assert.equal(prepareReceiptImport([uncertain], initialState).entries.length, 1);
+});
+
+test('receipt corrections preserve exact money and accept a validated manual FX rate', () => {
+  const draft = {
+    ...receiptDraft(job.result),
+    amount: '5.01',
+    currency: 'USD',
+    exchangeRate: '1.35',
+  };
+  const entry = receiptEntry({ ...job, draft }, initialState);
+  assert.equal(entry.amount, 676);
+  assert.equal(entry.original?.amount, 501);
+  assert.equal(entry.original?.source, 'Manual');
+  for (const exchangeRate of ['0', '-1', 'NaN', 'Infinity'])
+    assert.throws(() => receiptEntry({ ...job, draft: { ...draft, exchangeRate } }, initialState));
+  assert.throws(() => receiptEntry({ ...job, draft: { ...draft, amount: '5.001' } }, initialState));
+});
+
+test('Undo removes only its unchanged imports and preserves other or edited expenses', () => {
+  const imported = receiptEntry({ ...job, fingerprint: 'photo-a' }, initialState);
+  const second = { ...imported, id: 'receipt-second' };
+  const unrelated = { ...imported, id: 'manual' };
+  const edited = { ...second, title: 'Edited merchant' };
+  const state = { ...initialState, entries: [imported, edited, unrelated] };
+  const undone = undoReceiptImport(state, [imported, second]);
+  assert.deepEqual(undone.removed, [imported.id]);
+  assert.deepEqual(undone.state.entries, [edited, unrelated]);
+  assert.deepEqual(undoReceiptImport(undone.state, [imported]).removed, []);
 });

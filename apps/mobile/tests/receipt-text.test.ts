@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseReceiptText, type RecognizedReceipt } from '../src/receipt-text';
 import { processReceipt } from '../src/receipt-processor';
+import { clearDeviceReceipt, applyReceiptAudit } from '../src/receipt-audit';
 
 const now = '2026-11-15';
 function document(...rows: string[]): RecognizedReceipt {
@@ -182,4 +183,65 @@ test('explicit cloud processing uses the cloud path without starting native OCR'
   assert.equal(output.engine, 'cloud');
   assert.equal(output.result, expected);
   assert.equal(output.recognizedText, undefined);
+});
+
+test('automatic device import requires high-confidence financial evidence', () => {
+  const draft = parseReceiptText(sample, now);
+  assert.equal(clearDeviceReceipt(sample, draft), true);
+  const blurry = structuredClone(sample);
+  blurry.lines[4].confidence = 0.7;
+  // The draft still parses, but must not auto-add without strong total evidence.
+  assert.equal(parseReceiptText(blurry, now).amount, 5);
+  assert.equal(clearDeviceReceipt(blurry, draft), false);
+  const footer = structuredClone(sample);
+  footer.lines[5].confidence = 0.1;
+  assert.equal(clearDeviceReceipt(footer, draft), true);
+});
+
+test('local model can classify or veto, but cannot rewrite financial fields', async () => {
+  const draft = parseReceiptText(sample, now);
+  const audit = {
+    status: 'reviewed' as const,
+    approved: true,
+    category: 'Food & drinks',
+    amount: 999,
+    currency: 'XYZ',
+    date: '2099-01-01',
+  };
+  assert.deepEqual(applyReceiptAudit(draft, audit), { ...draft, category: 'Food & drinks' });
+  assert.equal(applyReceiptAudit(draft, { ...audit, category: 'Unknown' }).category, 'Other');
+  let cloudCalls = 0;
+  const operations = {
+    recognize: async () => sample,
+    cloud: async () => {
+      cloudCalls++;
+      return draft;
+    },
+  };
+  const approved = await processReceipt(file, 'device', {
+    ...operations,
+    review: async () => audit,
+  });
+  assert.equal(approved.needsReview, false);
+  const veto = await processReceipt(file, 'device', {
+    ...operations,
+    review: async () => ({ ...audit, approved: false, reason: 'Check total' }),
+  });
+  assert.equal(veto.needsReview, true);
+  const unavailable = await processReceipt(file, 'device', {
+    ...operations,
+    review: async () => {
+      throw new Error('Model disabled');
+    },
+  });
+  assert.equal(unavailable.needsReview, false);
+  assert.deepEqual(unavailable.audit, { status: 'unavailable' });
+  const missing = await processReceipt(file, 'device', {
+    ...operations,
+    recognize: async () => document('Cafe', 'TOTAL $5.00'),
+    review: async () => audit,
+  });
+  assert.equal(missing.needsReview, true);
+  assert.equal(missing.result.currency, '');
+  assert.equal(cloudCalls, 0);
 });

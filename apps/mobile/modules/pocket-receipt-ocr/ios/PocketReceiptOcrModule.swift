@@ -7,6 +7,10 @@ public final class PocketReceiptOcrModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PocketReceiptOcr")
 
+    AsyncFunction("review") { (payload: String) async -> [String: Any] in
+      await ReceiptAiReviewer.review(payload: payload)
+    }
+
     AsyncFunction("recognize") { (uri: String, promise: Promise) in
       autoreleasepool {
         do {

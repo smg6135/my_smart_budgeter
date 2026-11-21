@@ -91,6 +91,8 @@ export function Field({
   keyboardType = 'default',
   secureTextEntry = false,
   multiline = false,
+  accessibilityLabel,
+  onFocus,
 }: {
   label: string;
   value: string;
@@ -99,12 +101,15 @@ export function Field({
   keyboardType?: 'default' | 'decimal-pad' | 'url';
   secureTextEntry?: boolean;
   multiline?: boolean;
+  accessibilityLabel?: string;
+  onFocus?: () => void;
 }) {
   return (
     <View style={{ gap: 8 }}>
       <Label>{label}</Label>
       <TextInput
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel || label}
+        onFocus={onFocus}
         style={[styles.input, multiline && { minHeight: 100, textAlignVertical: 'top' }]}
         value={value}
         onChangeText={onChangeText}
