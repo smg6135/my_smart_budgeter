@@ -18,7 +18,7 @@ class PocketDeviceAiModule : Module() {
   private val model by lazy { Generation.getClient() }
   override fun definition() = ModuleDefinition {
     Name("PocketDeviceAi")
-    AsyncFunction("availability") Coroutine {
+    AsyncFunction("availability") Coroutine { ->
       try {
         val status = withTimeout(3000) { model.checkStatus() }
         if (status == FeatureStatus.AVAILABLE) mapOf("available" to true)
