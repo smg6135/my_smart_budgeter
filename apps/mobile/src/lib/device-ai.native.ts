@@ -14,6 +14,7 @@ import { localModel } from '../local-model';
 import {
   categoryMessages,
   categorySchema,
+  receiptCategoryMessages,
   readCategory,
   receiptReviewMessages,
   receiptReviewSchema,
@@ -184,10 +185,7 @@ export async function classifyReceipt(
         : { ...category, approved: false };
     }
     const category = readCategory(
-      await generate(
-        categoryMessages(document.lines.map((line) => line.text).join('\n')),
-        categorySchema,
-      ),
+      await generate(receiptCategoryMessages(document), categorySchema),
     );
     if (category.status !== 'classified') return { ...category, approved: false };
     // Financial validation in receipt-processor remains mandatory, independent of this AI review.
