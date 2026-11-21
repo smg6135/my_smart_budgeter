@@ -1,6 +1,6 @@
 # Mobile refinement
 
-Stopped at the user's request on 2026-11-17. Current implementation and remaining work are saved for the next session. Do not treat the validation/release step as complete.
+Resumed on 2026-11-21. The mobile changes and Safari focus fix pass validation. SDK patch alignment and a fresh TestFlight release are in progress.
 
 1. Fix native safe-area/bottom spacing, clipped amounts and narrow-screen layout.
 2. Make Overview statistics-first: horizontal income/spent/saved, prominent month calendar, past summaries, active-plan allocation, minimal actions.
@@ -17,12 +17,12 @@ Steps 1–7 are implemented in commit `030ae33`. Lint, typecheck, Expo dependenc
 
 Migration keeps the existing ledger and budget. Older months use the migrated budget because previous versions did not retain past plan settings. New plan changes are dated snapshots. Deactivating or drafting a plan keeps its bills and goals; payments already recorded stay in the shared ledger.
 
-## Handoff
+## Validation
 
-- Native Release compilation, Apple Vision tests and startup through sign-in passed: [iOS CI](https://github.com/smg6135/my_smart_budgeter/actions/runs/43897584825).
-- Backend and infrastructure CI passed. Browser CI passed 76/78 checks: [MVP CI](https://github.com/smg6135/my_smart_budgeter/actions/runs/43897585017).
-- Two Safari checks failed: rapid amount input after closing the sign selector, and entering a manual exchange rate. Traces suggest popup focus restoration during animation. The follow-up disables modal animations on web while preserving native animations; this change is saved but its full verification is unfinished.
-- Local browser runs were interrupted by machine sleep and then stopped at the user's request. Do not report them as a full pass.
+- Native Release compilation, Apple Vision tests and startup through sign-in passed with the Safari follow-up included: [iOS CI](https://github.com/smg6135/my_smart_budgeter/actions/runs/43987174461).
+- Backend, infrastructure and all **78 browser checks** passed: [MVP CI](https://github.com/smg6135/my_smart_budgeter/actions/runs/43987174493).
+- The Safari focus fix disables modal animations on web while preserving native animations. Both previously failing cases passed three additional repeat runs on 2026-11-21.
+- Expo SDK 58 patch packages are aligned on 2026-11-21. Dependency compatibility, local lint/typecheck and all **40 unit tests** pass after the update; fresh browser/native CI and a signed build are next.
 - Signed iOS build **1.0.0 (3)** finished: [EAS build](https://expo.dev/accounts/mgsong19/projects/pocket-budget/builds/7be55b1f-fe16-43b9-9bbe-afe88211ac1d). It contains the redesign from `030ae33`; it has **not** been submitted to TestFlight. The later web animation change is not in that build.
 - Existing Expo project linkage and App Store Connect app ID are committed. Provider keys, environment files, signed binaries, crash reports and scratch artifacts stay ignored.
 
