@@ -38,7 +38,7 @@ On an iPhone:
 
 Real-device validation and a signed TestFlight build remain separate from the unsigned CI build.
 
-Verified implementation: 35 TypeScript tests, 63 browser checks, three real Vision tests and an unsigned simulator build of the full app/Expo bridge pass. [iOS build run](https://github.com/smg6135/my_smart_budgeter/actions/runs/43726488387). This does not validate camera/file-picker interaction on a physical iPhone.
+Verified on 2026-11-21: 40 TypeScript tests, 78 browser checks, three real Vision tests and a Release simulator build/launch through sign-in pass. [iOS build run](https://github.com/smg6135/my_smart_budgeter/actions/runs/44862193891). Signed build 1.0.0 (4) is uploaded to TestFlight. Camera, gallery and wheel interactions still require a physical iPhone check.
 
 ## Android and web
 

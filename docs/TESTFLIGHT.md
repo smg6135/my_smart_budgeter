@@ -34,33 +34,32 @@ Install the resulting development build on a registered iPhone. The phone's `loc
 The first 1.0.0 build had a native launch crash: ExpoModulesCore required `RCTStatusBarAppearance`, absent from React Native 0.88.0. The fix aligns the Expo SDK packages with React Native 0.88.1. It requires a fresh native build; reinstalling build 1 or applying a JavaScript update cannot repair it. CI now checks dependency compatibility and launches a Release simulator build to verify the sign-in screen.
 
 1. The US and Singapore APIs are deployed. Production public values are prepared in the ignored `apps/mobile/.env.production`.
-2. Create the App Store Connect app for bundle ID `com.mingonsong.pocketbudget`.
+2. Use the existing App Store Connect app for bundle ID `com.mingonsong.pocketbudget` (app ID `6835131439`).
 3. Add the prepared public values in Expo project settings → Environment variables → production. Include Firebase configuration, Google web/iOS client IDs, reversed iOS URL scheme and both HTTPS API origins. Keep `EXPO_PUBLIC_AUTH_EMULATOR_URL` empty, including in local production builds, so the local `.env` cannot enable emulators. [Expo environment setup](https://docs.expo.dev/eas/environment-variables/manage/).
 4. Build and upload:
 
 ```bash
 cd apps/mobile
 npx eas-cli@latest login
-npx eas-cli@latest init
 npx eas-cli@latest build --platform ios --profile production
 npx eas-cli@latest submit --platform ios --profile production --latest
 ```
 
 Use your Apple Developer account when prompted. Let EAS manage signing or select your existing credentials. The existing app is configured in `submit.production.ios.ascAppId` in `eas.json`.
 
-Build 1.0.0 (2) includes the launch fix. Its signed iPhone binary contains the previously missing React Native class, and the Release simulator startup check now passes through to sign-in. Update the installed app through TestFlight when this build finishes Apple processing. Keep the existing installation to preserve device-local budgets.
-
-The mobile redesign was built as 1.0.0 (3), but submission is pending. Work stopped at the user's request; see [mobile refinement handoff](MOBILE_REFINEMENT_PLAN.md) for validation results and remaining steps.
+Build **1.0.0 (4)** contains the mobile redesign, native gallery/wheel pickers and current Expo SDK 58 patches. Its signed iPhone binary passed version, camera/photo permission, URL scheme and required React Native startup-symbol checks. It was [uploaded to TestFlight](https://expo.dev/accounts/mgsong19/projects/pocket-budget/submissions/b7a52bf8-4fce-4c47-8204-5e25cb961777) on 2026-11-21. Update the existing installation when Apple processing finishes to preserve device-local budgets. See [mobile refinement](MOBILE_REFINEMENT_PLAN.md) for validation results.
 
 After processing, open App Store Connect → TestFlight → add the build to an internal test group. Install TestFlight on your phone and accept the invitation. External groups require Beta App Review. Uploading a build does not publish it to the App Store. [Expo submission](https://docs.expo.dev/submit/ios/), [TestFlight distribution](https://docs.expo.dev/submit/testflight/).
 
 ## Device checks
 
-The iOS receipt scanner now includes a local Apple Vision module. Build a new native binary with the commands above; an older build or JavaScript-only update cannot add it. Test image scans in airplane mode, incomplete-field review, batch processing, and the explicit cloud-upload confirmation. PDFs still need cloud OCR or manual entry. [OCR checks](RECEIPT_OCR.md).
+The iOS receipt scanner includes a local Apple Vision module. Test image scans in airplane mode, incomplete-field review, batch processing, and the explicit cloud-upload confirmation. Photos opens the native multi-select gallery; the app picker no longer selects PDF attachments. [OCR checks](RECEIPT_OCR.md).
 
 - Signup, verification, Google login, refresh, sign-out and account separation.
-- Expense CRUD, goals, currency conversion and persistence after reopening.
-- Camera, multi-file upload, PDF, retry and receipt review.
+- Entry sign/currency wheels, preferred currencies, expense CRUD and persistence after reopening.
+- Camera, Photos gallery, HEIC batch scans, retry and receipt review.
+- Draft/activate/deactivate plans, Overview allocation and past calendar summaries.
+- Bottom safe area, horizontal statistics and uncropped daily allowance.
 - Region selection through HTTPS Gateways.
 - No provider-key field; AI works with server credentials.
 - Signed-in offline budgets remain available; AI reports connection failures.
