@@ -27,7 +27,7 @@ Apple Vision reads photos. Available Apple Foundation Models handles classificat
 
 ## Native Android
 
-Run `npm run prepare:local-ai`, then `npx expo run:android` with a current Android SDK/JDK 17. The native runtime supports 64-bit ARM devices and x86_64 emulators. Available Gemini Nano is preferred; otherwise the same local model installs inside the app. Receipt OCR remains iOS-only.
+Run `npm run prepare:local-ai`, then `npx expo run:android` with a current Android SDK/JDK 17. The app requires Android 8+ (API 26), with 64-bit ARM devices or x86_64 emulators. Available Gemini Nano is preferred; otherwise the same local model installs inside the app. Receipt OCR remains iOS-only.
 
 ## TestFlight
 
