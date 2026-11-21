@@ -134,3 +134,10 @@ services/api/.venv/bin/python scripts/smoke-cloud.py --url https://sg.backend.no
 ```
 
 Frontend production configuration is prepared in ignored `apps/mobile/.env.production`. Set those public values in EAS production, including an empty auth emulator URL. Google consent/native callbacks, camera, Keychain and real PDF/batch uploads need device checks. See [TestFlight](TESTFLIGHT.md).
+
+
+## Receipt import release — 2026-11-21
+
+[Release PR #4](https://github.com/smg6135/my_smart_budgeter/pull/4) merges the regional API image digests built from `825b1d8`. Cloud OCR returns empty notes for clear extraction and flags uncertainty for one correction step. Release CI passes backend, infrastructure and all 90 browser checks. Both public API health endpoints returned 200 and anonymous FX requests returned 401 after the rollout; Singapore briefly returned 503 while rolling.
+
+Operator GCP credentials expired during verification. Argo application status, running pod digests and authenticated live OCR still need a renewed `gcloud auth login` / `gcloud auth application-default login`. The GitHub federation identity published successfully; customers use their existing Firebase authentication and do not need an operator login.

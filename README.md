@@ -41,7 +41,7 @@ Email/password + Google OAuth → Firebase ID token → regional HTTPS Gateway +
 
 Models are operator-configurable in `services/ai/config.yaml`. Bulk upload uses two concurrent requests, up to 20 files, 8 MB each. Review extracted expenses before saving.
 
-New iOS builds scan images on-device with Apple Vision, then parse and review fields locally. Cloud OCR requires an explicit upload confirmation on iOS; Android/web retain cloud scanning. The photo picker accepts HEIC/HEIF, JPG, PNG and WEBP; the backend also accepts PDF. [Receipt OCR and device testing](docs/RECEIPT_OCR.md).
+Receipt selection starts analysis immediately. Clear receipts auto-add with Undo; uncertain receipts open one batch correction screen. New iOS builds use Apple Vision and, where available, Apple Foundation Models for local review. Cloud OCR requires an explicit upload confirmation on iOS; Android/web retain cloud scanning. The photo picker accepts HEIC/HEIF, JPG, PNG and WEBP; the backend also accepts PDF. [Receipt OCR and device testing](docs/RECEIPT_OCR.md).
 
 Budgets remain on each device, scoped by account. Sign-in does not sync ledgers. Existing unscoped budgets remain untouched in legacy storage. Native tokens use SecureStore; web tokens use sessionStorage. Never put AI keys in `EXPO_PUBLIC_` variables.
 

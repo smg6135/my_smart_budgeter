@@ -47,17 +47,17 @@ npx eas-cli@latest submit --platform ios --profile production --latest
 
 Use your Apple Developer account when prompted. Let EAS manage signing or select your existing credentials. The existing app is configured in `submit.production.ios.ascAppId` in `eas.json`.
 
-Build **1.0.0 (5)** adds the chat keyboard correction to the mobile redesign, native gallery/wheel pickers and current Expo SDK 58 patches. Its signed binary was checked for the new keyboard/composer code, bundle ID/version and required React Native startup symbol. It was [uploaded to TestFlight](https://expo.dev/accounts/mgsong19/projects/pocket-budget/submissions/65c8bb84-8862-4790-bcd4-aa8ca5109609) on 2026-11-21. Update the existing installation when Apple processing finishes to preserve device-local budgets. See [mobile refinement](MOBILE_REFINEMENT_PLAN.md) for validation results.
+Build **1.0.0 (7)** adds automatic receipt analysis, clear-receipt auto-add with Undo, exact-photo duplicate detection and one batch correction screen. Eligible iOS 26+ devices use Apple Foundation Models for local receipt review; other devices keep Vision parsing. It retains the chat keyboard fix and mobile redesign. The signed binary was checked for these JavaScript changes, native model schema/instructions, crypto module, weak Foundation Models linkage, bundle ID/version and React startup symbol. Its [TestFlight upload](https://expo.dev/accounts/mgsong19/projects/pocket-budget/submissions/8813b38e-731e-4136-9e07-f5905a2ddcca) finished on 2026-11-21. Update the existing installation when Apple processing finishes to preserve device-local budgets. See [mobile refinement](MOBILE_REFINEMENT_PLAN.md) for validation results.
 
 After processing, open App Store Connect → TestFlight → add the build to an internal test group. Install TestFlight on your phone and accept the invitation. External groups require Beta App Review. Uploading a build does not publish it to the App Store. [Expo submission](https://docs.expo.dev/submit/ios/), [TestFlight distribution](https://docs.expo.dev/submit/testflight/).
 
 ## Device checks
 
-The iOS receipt scanner includes a local Apple Vision module. Test image scans in airplane mode, incomplete-field review, batch processing, and the explicit cloud-upload confirmation. Photos opens the native multi-select gallery; the app picker no longer selects PDF attachments. [OCR checks](RECEIPT_OCR.md).
+The iOS receipt scanner includes a local Apple Vision module. Test automatic scans in airplane mode, clear-receipt auto-add, Undo, duplicate imports, uncertain-field batch correction and the explicit cloud-upload confirmation. Eligible iOS 26+ devices also use Apple Foundation Models for local text review; unsupported/disabled devices keep the Vision parser. Photos opens the native multi-select gallery; the app picker no longer selects PDF attachments. [OCR checks](RECEIPT_OCR.md).
 
 - Signup, verification, Google login, refresh, sign-out and account separation.
 - Entry sign/currency wheels, preferred currencies, expense CRUD and persistence after reopening.
-- Camera, Photos gallery, HEIC batch scans, retry and receipt review.
+- Camera/Photos, HEIC batch auto-add, Undo, duplicate imports, retry and one correction screen. On supported phones, test with Apple Intelligence enabled and disabled.
 - Draft/activate/deactivate plans, Overview allocation and past calendar summaries.
 - Bottom safe area, horizontal statistics and uncropped daily allowance.
 - Chat: open the keyboard, type/edit a long multiline draft, scroll history, send a message and dismiss the keyboard. Input/caret/Send must remain visible; navigation should return after dismissal. Check a long AI proposal too.
