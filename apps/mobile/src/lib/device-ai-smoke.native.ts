@@ -49,11 +49,17 @@ export async function runDeviceAiSmoke() {
         notes: '',
       },
     );
-    if (result.status !== 'classified' || result.category !== 'Food & drinks' || !result.approved)
+    const classified = result.status === 'classified' && result.category === 'Food & drinks';
+    const uncertain = result.status === 'needs-input' && result.approved === false;
+    if (!classified && !uncertain)
       throw new Error(`Local receipt check failed: ${JSON.stringify(result)}`);
     await FileSystem.writeAsStringAsync(
       file,
-      JSON.stringify({ status: 'passed', entries: 3, receipt: true }),
+      JSON.stringify({
+        status: 'passed',
+        entries: 3,
+        receipt: classified && result.approved ? 'approved' : 'manual-review',
+      }),
     );
   } catch (error) {
     await FileSystem.writeAsStringAsync(

@@ -1,11 +1,6 @@
 name: Validate Android local AI
 on:
   workflow_dispatch:
-  pull_request:
-    paths: ['apps/mobile/**', '.github/workflows/android-local-ai.yml']
-  push:
-    branches: [main]
-    paths: ['apps/mobile/**', '.github/workflows/android-local-ai.yml']
 permissions:
   contents: read
 concurrency:

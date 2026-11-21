@@ -7,15 +7,6 @@ on:
         required: false
         default: ''
         type: string
-  pull_request:
-    paths:
-      - 'apps/mobile/**'
-      - '.github/workflows/ios-ocr.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - '.github/workflows/ios-ocr.yml'
 permissions:
   contents: read
 concurrency:

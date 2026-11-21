@@ -37,3 +37,11 @@ The **first** model installation requires internet. Afterward it works in airpla
 - Unit tests exercise acquisition, corruption, cancellation, concurrency, offline reuse and output boundaries; native Swift tests check real SHA-256/file truncation. iOS/Android CI compiles the bridges/runtime. Real device performance and system-model behavior still need physical-device testing.
 
 Sources: [Google Nano setup/availability](https://developers.google.com/ml-kit/genai/prompt/android/get-started), [LiteRT-LM](https://developers.google.com/edge/litert-lm/overview), [Qwen3 model card](https://huggingface.co/Qwen/Qwen3-0.6B), [pinned downloadable weights](https://huggingface.co/bartowski/Qwen_Qwen3-0.6B-GGUF/tree/60b85c0e3d8fe0f6474f406922a26d12aca4550d), [Gemma model card](https://huggingface.co/google/gemma-3-270m-it), [llama.rn](https://github.com/mybigday/llama.rn).
+
+## Verification and build quota
+
+67 local unit tests, lint/typecheck and 78 browser checks pass. [Android native compilation](https://github.com/smg6135/my_smart_budgeter/actions/runs/44898067281) passes. The iOS simulator downloaded/verified the real weights and correctly classified taxi fare, dentist appointment and movie tickets. The receipt fixture returned `unclear` and was held for manual review, without automatic approval. The original smoke test expected that specific receipt to be approved and failed; its source assertion now accepts this intended conservative outcome. That assertion update has not been rerun remotely.
+
+Runtime is pinned to llama.rn 0.13.0-rc.12 for React Native 0.88 compatibility. Qwen thinking is explicitly disabled; the adapter uses parsed answer content and handles the native ChatML assistant envelope. Native runtime/phone performance and uncertain receipt handling still need physical-device checks.
+
+Native iOS/Android CI is manual to conserve quota. Reuse a matching EAS simulator artifact via the iOS workflow's `simulator_url` input for JS-only checks; it repacks JavaScript without native compilation. Always use an artifact with matching native dependencies. Store submissions use the full signed build pipeline. No further native build attempts are planned in this session.

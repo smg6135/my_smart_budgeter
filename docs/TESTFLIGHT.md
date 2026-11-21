@@ -31,6 +31,10 @@ Run `npm run prepare:local-ai`, then `npx expo run:android` with a current Andro
 
 ## TestFlight
 
+Latest uploaded build: **1.0.0 (12)**. The [existing signed build](https://expo.dev/accounts/mgsong19/projects/pocket-budget/builds/a6118fa8-f382-460d-bbd8-68e8edd710db) was verified and its [TestFlight upload](https://expo.dev/accounts/mgsong19/projects/pocket-budget/submissions/22b8d33b-0a3f-4ae0-a839-e20992ba6795) finished. Update when Apple processing makes it available; keep the existing installation to preserve local data.
+
+Build 12 adds the downloaded local-model fallback and native response parsing. Without system AI, connect to Wi-Fi and check Settings → On-device AI for installation progress. After installation, test in airplane mode. Native entry classification was exercised successfully; the receipt fixture was conservatively held for manual category review. Physical-phone performance still needs testing. Native CI is now manual and no further builds are scheduled to conserve quota.
+
 Use the existing Expo project and App Store Connect app (`com.mingonsong.pocketbudget`, app ID `6835131439`):
 
 ```bash

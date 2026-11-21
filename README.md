@@ -42,6 +42,8 @@ The previous GCP/LiteLLM deployment is separate from the free app and can incur 
 
 ## Checks
 
+Native build workflows are manual to conserve quota. Prefer local checks and reuse matching simulator artifacts for JavaScript-only native verification.
+
 ```bash
 cd apps/mobile
 npm run typecheck

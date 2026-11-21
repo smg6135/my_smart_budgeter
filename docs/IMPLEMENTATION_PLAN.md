@@ -1,5 +1,7 @@
 # Current implementation: free, on-device AI
 
+Latest: downloaded local-model fallback is implemented and **build 1.0.0 (12)** is uploaded to TestFlight. 67 local unit tests and lint/typecheck pass; 78 browser checks pass. Android native compilation passes. Native iOS downloads/verification and three entry classifications were exercised; the receipt fixture requested manual review. No additional native builds are scheduled; native workflows are manual to conserve quota. [Details and limitations](LOCAL_AI.md).
+
 2026-11-21 update: available system AI first, then an automatic, in-app Qwen3 0.6B download on iOS/Android. Wi-Fi acquisition, explicit cellular download, pause/retry, SHA-256 verification, offline reuse and bounded local inference are implemented. [Research, implementation and checks](LOCAL_AI.md). The earlier no-alternative-model requirement below is superseded by this local-only fallback; cloud/rules classification remains disabled.
 
 1. Separate native OCR from the native AI service.
