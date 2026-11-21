@@ -138,6 +138,8 @@ async function generate(messages: LocalMessage[], schema?: object): Promise<stri
       });
       if (process.env.EXPO_PUBLIC_LOCAL_AI_SMOKE === '1') {
         smokeTrace = {
+          prompt: formatted.prompt,
+          format: formatted.type,
           raw: output.text,
           content: output.content,
           reasoning: output.reasoning_content,
