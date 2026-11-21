@@ -1,24 +1,10 @@
 import type { ScanResult } from './api';
 import type { RecognizedReceipt } from './receipt-text';
 import { parseReceiptText } from './receipt-text';
-
-export type ReceiptAudit = {
-  status: 'reviewed' | 'unavailable';
-  approved?: boolean;
-  category?: string;
-  reason?: string;
-};
-export const receiptCategories = [
-  'Food & drinks',
-  'Groceries',
-  'Transport',
-  'Shopping',
-  'Health',
-  'Entertainment',
-  'Other',
-];
-
-// Auto-add requires the same financial fields to survive a stricter OCR confidence cutoff.
+import { expenseCategories, type ReceiptClassification } from './classification';
+export type ReceiptAudit = ReceiptClassification;
+export const receiptCategories = [...expenseCategories];
+// OCR confidence and financial validation are ordinary code, not an AI fallback.
 export function clearDeviceReceipt(document: RecognizedReceipt, draft: ScanResult): boolean {
   const checked = parseReceiptText({
     ...document,
@@ -36,14 +22,12 @@ export function clearDeviceReceipt(document: RecognizedReceipt, draft: ScanResul
     !draft.notes.trim()
   );
 }
-
-export function applyReceiptAudit(draft: ScanResult, audit: ReceiptAudit): ScanResult {
-  // The language model can classify or flag a draft; it cannot rewrite money, dates or currencies.
+export function applyReceiptAudit(
+  draft: ScanResult,
+  classification: ReceiptClassification,
+): ScanResult {
   return {
     ...draft,
-    category:
-      audit.status === 'reviewed' && audit.category && receiptCategories.includes(audit.category)
-        ? audit.category
-        : draft.category,
+    category: classification.status === 'classified' ? classification.category : '',
   };
 }

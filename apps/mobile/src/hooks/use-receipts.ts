@@ -4,14 +4,10 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
-import { request, ScanResult } from '../api';
 import { id, State } from '../finance';
-import {
-  recognizeReceipt,
-  reviewReceiptOnDevice,
-  deviceOcrAvailable,
-} from '../lib/native-receipt-ocr';
-import { processReceipt, type ReceiptEngine } from '../receipt-processor';
+import { recognizeReceipt, deviceOcrAvailable } from '../lib/native-receipt-ocr';
+import { classifyReceipt } from '../lib/device-ai';
+import { processReceipt } from '../receipt-processor';
 import {
   ReceiptFile,
   ReceiptJob,
@@ -76,7 +72,7 @@ export function useReceipts(
   }
   const patch = (jobId: string, update: Partial<ReceiptJob>) =>
     change((old) => old.map((j) => (j.id === jobId ? { ...j, ...update } : j)));
-  async function analyze(targets: ReceiptJob[], engine: ReceiptEngine) {
+  async function analyze(targets: ReceiptJob[]) {
     if (active.current || !stateRef.current || !targets.length) return;
     const epoch = ++generation.current,
       targetIds = new Set(targets.map((j) => j.id));
@@ -111,18 +107,9 @@ export function useReceipts(
               return;
             }
             if (fingerprint) seen.add(fingerprint);
-            const output = await processReceipt(job, engine, {
+            const output = await processReceipt(job, {
               recognize: recognizeReceipt,
-              review: reviewReceiptOnDevice,
-              cloud: async (file) => {
-                if (!mounted.current || generation.current !== epoch || !stateRef.current)
-                  throw new Error('Scan cancelled.');
-                return request<ScanResult>(stateRef.current, '/v1/receipts/scan', {
-                  data,
-                  mime: file.mime,
-                  mode: targets.length > 1 ? 'bulk' : 'single',
-                });
-              },
+              classify: classifyReceipt,
             });
             if (mounted.current && generation.current === epoch)
               patch(job.id, {
@@ -140,7 +127,7 @@ export function useReceipts(
               });
           }
         },
-        engine === 'device' ? 1 : 2,
+        1,
       );
       if (mounted.current && generation.current === epoch) {
         completedRef.current(jobsRef.current.filter((j) => targetIds.has(j.id)));
@@ -205,23 +192,20 @@ export function useReceipts(
       if (!mounted.current) return;
       const selected: ReceiptJob[] = files.map((file) => ({ ...file, status: 'pending' }));
       change(() => [...unresolved, ...selected]);
-      await analyze(selected, Platform.OS === 'ios' ? 'device' : 'cloud');
+      await analyze(selected);
     } catch (e) {
       if (mounted.current) notify(message(e));
     } finally {
       picking.current = false;
     }
   }
-  async function process(
-    jobId?: string,
-    engine: ReceiptEngine = Platform.OS === 'ios' ? 'device' : 'cloud',
-  ) {
+  async function process(jobId?: string) {
     const targets = jobsRef.current.filter((j) =>
       jobId
         ? j.id === jobId && ['pending', 'error', 'ready'].includes(j.status)
         : j.status === 'pending',
     );
-    await analyze(targets, engine);
+    await analyze(targets);
   }
   return {
     jobs,
@@ -235,11 +219,6 @@ export function useReceipts(
     choose,
     process,
     patch,
-    improve: () =>
-      analyze(
-        jobsRef.current.filter((j) => ['ready', 'error'].includes(j.status)),
-        'cloud',
-      ),
     patchDraft: (jobId: string, values: Partial<ReceiptDraft>) =>
       change((old) =>
         old.map((j) =>

@@ -73,18 +73,12 @@ test('calendar navigates past months and shows preserved summary and selected-da
   await expect(page.getByRole('button', { name: 'Next month' })).toBeDisabled();
 });
 
-test('currency favorites limit entry selectors and region settings stay separate', async ({
-  page,
-}) => {
+test('currency favorites limit entry selectors and AI stays on-device', async ({ page }) => {
   await addCurrency(page, 'USD');
   await select(page, 'Display currency', 'SGD', 'USD');
-  await page.getByRole('radio', { name: 'Service region Singapore' }).click();
-  await expect(page.getByRole('radio', { name: 'Service region Singapore' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: /Service region/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Display currency USD' })).toBeVisible();
-  await page.getByRole('radio', { name: 'AI mode Conversation' }).click();
-  await expect(
-    page.getByText('Uses a more capable model for detailed questions and complex decisions.'),
-  ).toBeVisible();
+  await expect(page.getByText('On-device AI', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Verify email' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Refresh session' })).toHaveCount(0);
   await newEntry(page);

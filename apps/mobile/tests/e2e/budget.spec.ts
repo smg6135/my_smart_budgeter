@@ -58,95 +58,56 @@ test('minimal entry defaults its name and supports income; filters apply explici
   await newEntry(page);
   await page.getByLabel('Amount', { exact: true }).fill('5');
   await page.getByRole('button', { name: 'Save entry' }).click();
-  await expect(page.getByRole('button', { name: 'Edit Food & drinks' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Other' })).toBeVisible();
   await page.getByRole('button', { name: 'Add an entry' }).click();
   await select(page, 'Entry type', '−', '+');
   await page.getByLabel('Amount', { exact: true }).fill('20');
   await page.getByRole('button', { name: 'Save entry' }).click();
   await select(page, 'Type', 'All', 'Income');
-  await expect(page.getByRole('button', { name: 'Edit Food & drinks' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Other' })).toBeVisible();
   await page.getByRole('button', { name: 'Apply filters' }).click();
-  await expect(page.getByRole('button', { name: 'Edit Food & drinks' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit Other' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Edit Income', exact: true })).toBeVisible();
   await page.getByLabel('From date').fill('2099-01-01');
   await page.getByRole('button', { name: 'Apply filters' }).click();
   await expect(page.getByText('No entries', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Search activity')).toHaveCount(0);
 });
-test('validates money input and displays verified-email requirement', async ({ page }) => {
+
+test('validates money input and gates AI by device capability without cloud calls', async ({
+  page,
+}) => {
+  let calls = 0;
+  await page.route('**/v1/planner/chat', (route) => {
+    calls++;
+    return route.abort();
+  });
   await newEntry(page);
   await page.getByLabel('Amount', { exact: true }).fill('-5');
   await page.getByRole('button', { name: 'Save entry' }).click();
   await expect(page.getByText('Enter an amount with up to 2 decimal places.')).toBeVisible();
   await page.getByRole('button', { name: 'Close form' }).click();
-  await page.route('**/v1/planner/chat', (route) =>
-    route.fulfill({ status: 403, json: { detail: 'Verify your email before using AI.' } }),
-  );
   await page.goto('/planner');
   await page.getByLabel('Message your planner').fill('A TV');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(page.getByText('Verify your email before using AI.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+  expect(calls).toBe(0);
 });
-test('AI gateway conversation, source links, and reviewable goal', async ({ page }) => {
-  await setBudget(page);
-  await page.route('**/v1/planner/chat', async (route) => {
-    expect(route.request().headers()['authorization']).toBe('Bearer customer-test-token');
-    expect(route.request().headers()).not.toHaveProperty('x-openai-key');
-    const body = route.request().postDataJSON();
-    expect(body.messages.at(-1).content).toBe('A TV for 1200 in six months');
-    expect(body).not.toHaveProperty('entries');
-    await route.fulfill({
-      json: {
-        message: 'Here is an estimated plan for your TV.',
-        proposal: {
-          title: 'Living room TV',
-          amount: 1200,
-          deadline: '2028-12-01',
-          emoji: '📺',
-          breakdown: ['TV: SGD 1100', 'Delivery: SGD 100'],
-        },
-        sources: [{ title: 'Official retailer', url: 'https://example.com/tv' }],
-      },
-    });
-  });
-  await page.goto('/planner');
-  await page.getByLabel('Message your planner').fill('A TV for 1200 in six months');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(page.getByText('Here is an estimated plan for your TV.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Official retailer ↗' })).toBeVisible();
-  await page.getByRole('button', { name: 'Review & add savings goal' }).click();
-  await expect(page.getByLabel('Target amount')).toHaveValue('1200.00');
-  await page.getByRole('button', { name: 'Save goal' }).click();
-  await openPlan(page);
-  await expect(page.getByText('Living room TV', { exact: true })).toBeVisible();
-});
-test('gallery receipt upload auto-adds a clear receipt', async ({ page }) => {
-  await page.route('**/v1/receipts/scan', (route) =>
-    route.fulfill({
-      json: {
-        merchant: 'Little Cafe',
-        amount: 12.5,
-        currency: 'SGD',
-        date: '2026-01-10',
-        category: 'Food & drinks',
-        notes: '',
-      },
-    }),
-  );
-  await page.goto('/tools');
-  const chooserPromise = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Upload receipts' }).click();
-  const chooser = await chooserPromise;
-  expect(chooser.isMultiple()).toBe(true);
-  await chooser.setFiles({
-    name: 'receipt.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
-      'base64',
+test('on-device AI has no cloud mode or price research control', async ({ page }) => {
+  await page.goto('/settings');
+  await expect(page.getByText('On-device AI', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(
+      'Categorizes entries and receipts after OCR. Chat stays on-device. No cloud AI or API keys.',
     ),
-  });
-  await expect(page.getByText('Added 1 expense', { exact: true })).toBeVisible();
-  await page.goto('/activity');
-  await expect(page.getByRole('button', { name: 'Edit Little Cafe', exact: true })).toBeVisible();
+  ).toBeVisible();
+  await expect(page.getByRole('radio', { name: /AI mode/ })).toHaveCount(0);
+  await expect(page.getByLabel('Research prices on the web')).toHaveCount(0);
+});
+test('unsupported browser scanning has no paid receipt upload fallback', async ({ page }) => {
+  await page.goto('/tools');
+  await expect(
+    page.getByText('On-device scanning is available in the iOS app. Add entries manually here.'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Upload receipts' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Try cloud analysis' })).toHaveCount(0);
 });

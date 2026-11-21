@@ -17,7 +17,7 @@ test('all screens fit narrow widths with long labels and large amounts', async (
     (state) => localStorage.setItem('pocket-budget.v2.test-user', JSON.stringify(state)),
     sample,
   );
-  await page.route('**/v1/fx/rates?**', (route) =>
+  await page.route('**/v2/exchange-rates?**', (route) =>
     route.fulfill({ status: 503, json: { detail: 'Offline layout test' } }),
   );
   const widths = test.info().project.use.isMobile ? [320, 360, 390, 430, 768] : [900, 1100, 1440];
@@ -63,7 +63,7 @@ test('larger text reflows without colliding at phone width', async ({ page }) =>
     (state) => localStorage.setItem('pocket-budget.v2.test-user', JSON.stringify(state)),
     sample,
   );
-  await page.route('**/v1/fx/rates?**', (route) =>
+  await page.route('**/v2/exchange-rates?**', (route) =>
     route.fulfill({ status: 503, json: { detail: 'Offline layout test' } }),
   );
   for (const path of paths) {

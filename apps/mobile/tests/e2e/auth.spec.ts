@@ -1,6 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+async function openSignIn(page: Page) {
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Sign in to an existing budget', exact: true }).click();
+}
 test('sign-in errors, password login and account isolation', async ({ page }) => {
-  await page.route('**/v1/fx/rates?**', (route) =>
+  await page.route('**/v2/exchange-rates?**', (route) =>
     route.fulfill({ status: 503, json: { detail: 'Offline' } }),
   );
   let reject = true;
@@ -24,7 +28,7 @@ test('sign-in errors, password login and account isolation', async ({ page }) =>
       );
     },
   );
-  await page.goto('/');
+  await openSignIn(page);
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Set budget' })).toHaveCount(0);
   await page.getByLabel('Email', { exact: true }).fill('one@example.com');
@@ -33,6 +37,7 @@ test('sign-in errors, password login and account isolation', async ({ page }) =>
   await expect(page.getByRole('alert')).toContainText('Sign-in failed');
   reject = false;
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.goto('/');
   await page.getByRole('button', { name: 'Set budget' }).click();
   await page.getByLabel('Monthly take-home income').fill('3456');
   await page.getByRole('button', { name: 'Save budget plan' }).click();
@@ -40,6 +45,7 @@ test('sign-in errors, password login and account isolation', async ({ page }) =>
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   await expect(page.getByLabel('OpenAI API key')).toHaveCount(0);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await openSignIn(page);
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
   await page.getByLabel('Email', { exact: true }).fill('two@example.com');
   await page.getByLabel('Password', { exact: true }).fill('password123');
@@ -55,7 +61,9 @@ test('sign-in errors, password login and account isolation', async ({ page }) =>
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('signed-in-token');
 });
 
-test('expired session refresh uses bearer token and approved AI alias', async ({ page }) => {
+test('local AI never refreshes an expired account token or calls a cloud model', async ({
+  page,
+}) => {
   await page.addInitScript(() =>
     sessionStorage.setItem(
       'pocket-auth-session.v1',
@@ -68,30 +76,25 @@ test('expired session refresh uses bearer token and approved AI alias', async ({
       }),
     ),
   );
-  await page.route('**/securetoken.googleapis.com/v1/token?**', (route) =>
-    route.fulfill({
-      json: { id_token: 'fresh-token', refresh_token: 'rotated-refresh', expires_in: '3600' },
-    }),
-  );
-  await page.route('**/v1/fx/rates?**', (route) =>
-    route.fulfill({ status: 503, json: { detail: 'Offline' } }),
-  );
-  await page.route('**/v1/planner/chat', (route) => {
-    expect(route.request().headers()['authorization']).toBe('Bearer fresh-token');
-    const body = route.request().postDataJSON();
-    expect(body.mode).toBe('planning');
-    expect(body).not.toHaveProperty('model');
-    return route.fulfill({ json: { message: 'Choose a date.', proposal: null, sources: [] } });
+  let calls = 0;
+  await page.route('**/securetoken.googleapis.com/**', (route) => {
+    calls++;
+    return route.abort();
   });
+  await page.route('**/v1/planner/chat', (route) => {
+    calls++;
+    return route.abort();
+  });
+  await page.route('**/v2/exchange-rates?**', (route) => route.fulfill({ status: 503, json: {} }));
   await page.goto('/planner');
   await page.getByLabel('Message your planner').fill('Plan a holiday');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(page.getByText('Choose a date.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+  expect(calls).toBe(0);
 });
 
 test('signed-out form fits a 320px phone screen', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.goto('/');
+  await openSignIn(page);
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 });
@@ -107,7 +110,7 @@ test('Google popup credential is exchanged for a Firebase session', async ({ pag
  `,
     }),
   );
-  await page.route('**/v1/fx/rates?**', (route) =>
+  await page.route('**/v2/exchange-rates?**', (route) =>
     route.fulfill({ status: 503, json: { detail: 'Offline' } }),
   );
   let attempts = 0;
@@ -126,7 +129,7 @@ test('Google popup credential is exchanged for a Firebase session', async ({ pag
       },
     });
   });
-  await page.goto('/');
+  await openSignIn(page);
   await expect.poll(() => page.evaluate(() => !!window.google)).toBe(true);
   await page.getByRole('button', { name: 'Continue with Google' }).click();
   await expect(page.getByRole('alert')).toContainText('Sign-in incomplete');
@@ -134,4 +137,25 @@ test('Google popup credential is exchanged for a Firebase session', async ({ pag
   await expect(page.getByTestId('page-scroll')).toBeVisible();
   await page.goto('/settings');
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
+});
+
+test('a local budget works offline without signing in and keeps account data separate', async ({
+  page,
+}) => {
+  await page.route('https://**', (route) => route.abort());
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Set budget' })).toBeVisible();
+  await page.getByRole('button', { name: 'Set budget' }).click();
+  await page.getByLabel('Monthly take-home income').fill('1500');
+  await page.getByRole('button', { name: 'Save budget plan' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('pocket-budget.local.v1') || 'null')?.income,
+      ),
+    )
+    .toBe(150000);
+  await page.reload();
+  await expect(page.getByTestId('overview-statistics')).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('pocket-auth-session.v1'))).toBeNull();
 });

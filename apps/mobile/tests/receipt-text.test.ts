@@ -130,118 +130,104 @@ test('low-confidence OCR cannot populate totals and multiple currencies require 
   assert.equal(parseReceiptText(source, now).amount, 0);
   assert.equal(parseReceiptText(document('Cafe', 'TOTAL USD 5.00 SGD 6.70'), now).currency, '');
 });
-test('device processing never reads/uploads an image or calls the cloud parser', async () => {
-  let cloudCalls = 0;
-  const output = await processReceipt(file, 'device', {
+
+test('OCR runs first and its text then goes to the separate on-device classifier', async () => {
+  const calls: string[] = [];
+  const output = await processReceipt(file, {
     recognize: async (uri) => {
       assert.equal(uri, file.uri);
+      calls.push('ocr');
       return sample;
     },
-    cloud: async () => {
-      cloudCalls++;
-      throw new Error('Must not upload');
+    classify: async (document, draft) => {
+      calls.push('ai');
+      assert.equal(document, sample);
+      assert.equal(draft.amount, 5);
+      return { status: 'classified', category: 'Food & drinks', approved: true };
     },
   });
-  assert.equal(output.engine, 'device');
+  assert.deepEqual(calls, ['ocr', 'ai']);
+  assert.equal(output.result.category, 'Food & drinks');
   assert.equal(output.result.amount, 5);
-  assert.match(output.recognizedText!, /TOTAL USD 5.00/);
-  assert.equal(cloudCalls, 0);
+  assert.equal(output.needsReview, false);
 });
-test('missing native modules, unreadable images and PDFs never silently fall back to cloud', async () => {
-  let cloudCalls = 0;
+test('OCR and validation never substitute for unavailable on-device AI classification', async () => {
+  const output = await processReceipt(file, {
+    recognize: async () => sample,
+    classify: async () => ({ status: 'unavailable', reason: 'Model disabled' }),
+  });
+  assert.equal(output.result.amount, 5);
+  assert.equal(output.result.currency, 'USD');
+  assert.equal(output.result.category, '');
+  assert.equal(output.needsReview, true);
+  const failed = await processReceipt(file, {
+    recognize: async () => sample,
+    classify: async () => {
+      throw new Error('Model failed');
+    },
+  });
+  assert.equal(failed.result.category, '');
+  assert.equal(failed.needsReview, true);
+});
+test('missing native OCR, PDFs and oversized files stop without a network fallback', async () => {
+  let classifyCalls = 0;
   const operations = {
     recognize: async () => {
       throw new Error('Native OCR unavailable');
     },
-    cloud: async () => {
-      cloudCalls++;
-      throw new Error('Must not upload');
+    classify: async () => {
+      classifyCalls++;
+      return { status: 'unavailable' as const, reason: 'Unavailable' };
     },
   };
-  await assert.rejects(processReceipt(file, 'device', operations), /Native OCR unavailable/);
+  await assert.rejects(processReceipt(file, operations), /Native OCR unavailable/);
   await assert.rejects(
-    processReceipt({ ...file, mime: 'application/pdf' }, 'device', operations),
-    /PDF needs cloud OCR/,
+    processReceipt({ ...file, mime: 'application/pdf' }, operations),
+    /receipt photo/,
   );
-  await assert.rejects(
-    processReceipt({ ...file, size: 9 * 1024 * 1024 }, 'device', operations),
-    /8 MB/,
-  );
-  assert.equal(cloudCalls, 0);
+  await assert.rejects(processReceipt({ ...file, size: 9 * 1024 * 1024 }, operations), /8 MB/);
+  assert.equal(classifyCalls, 0);
 });
-test('explicit cloud processing uses the cloud path without starting native OCR', async () => {
-  const expected = parseReceiptText(sample, now);
-  const output = await processReceipt(file, 'cloud', {
-    recognize: async () => {
-      throw new Error('Must not run native OCR');
-    },
-    cloud: async (input) => {
-      assert.equal(input, file);
-      return expected;
-    },
-  });
-  assert.equal(output.engine, 'cloud');
-  assert.equal(output.result, expected);
-  assert.equal(output.recognizedText, undefined);
-});
-
-test('automatic device import requires high-confidence financial evidence', () => {
+test('automatic device import requires high-confidence financial evidence plus AI classification', async () => {
   const draft = parseReceiptText(sample, now);
   assert.equal(clearDeviceReceipt(sample, draft), true);
   const blurry = structuredClone(sample);
   blurry.lines[4].confidence = 0.7;
-  // The draft still parses, but must not auto-add without strong total evidence.
   assert.equal(parseReceiptText(blurry, now).amount, 5);
   assert.equal(clearDeviceReceipt(blurry, draft), false);
   const footer = structuredClone(sample);
   footer.lines[5].confidence = 0.1;
   assert.equal(clearDeviceReceipt(footer, draft), true);
+  const output = await processReceipt(file, {
+    recognize: async () => blurry,
+    classify: async () => ({ status: 'classified', category: 'Food & drinks', approved: true }),
+  });
+  assert.equal(output.needsReview, true);
 });
-
-test('local model can classify or veto, but cannot rewrite financial fields', async () => {
+test('classification cannot rewrite money, dates or currencies, or approve missing evidence', async () => {
   const draft = parseReceiptText(sample, now);
-  const audit = {
-    status: 'reviewed' as const,
+  const classification = {
+    status: 'classified' as const,
     approved: true,
-    category: 'Food & drinks',
+    category: 'Food & drinks' as const,
     amount: 999,
     currency: 'XYZ',
     date: '2099-01-01',
   };
-  assert.deepEqual(applyReceiptAudit(draft, audit), { ...draft, category: 'Food & drinks' });
-  assert.equal(applyReceiptAudit(draft, { ...audit, category: 'Unknown' }).category, 'Other');
-  let cloudCalls = 0;
-  const operations = {
-    recognize: async () => sample,
-    cloud: async () => {
-      cloudCalls++;
-      return draft;
-    },
-  };
-  const approved = await processReceipt(file, 'device', {
-    ...operations,
-    review: async () => audit,
+  assert.deepEqual(applyReceiptAudit(draft, classification), {
+    ...draft,
+    category: 'Food & drinks',
   });
-  assert.equal(approved.needsReview, false);
-  const veto = await processReceipt(file, 'device', {
+  const operations = { recognize: async () => sample, classify: async () => classification };
+  const rejected = await processReceipt(file, {
     ...operations,
-    review: async () => ({ ...audit, approved: false, reason: 'Check total' }),
+    classify: async () => ({ ...classification, approved: false }),
   });
-  assert.equal(veto.needsReview, true);
-  const unavailable = await processReceipt(file, 'device', {
-    ...operations,
-    review: async () => {
-      throw new Error('Model disabled');
-    },
-  });
-  assert.equal(unavailable.needsReview, false);
-  assert.deepEqual(unavailable.audit, { status: 'unavailable' });
-  const missing = await processReceipt(file, 'device', {
+  assert.equal(rejected.needsReview, true);
+  const missing = await processReceipt(file, {
     ...operations,
     recognize: async () => document('Cafe', 'TOTAL $5.00'),
-    review: async () => audit,
   });
   assert.equal(missing.needsReview, true);
   assert.equal(missing.result.currency, '');
-  assert.equal(cloudCalls, 0);
 });

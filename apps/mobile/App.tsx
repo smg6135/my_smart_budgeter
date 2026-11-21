@@ -1,4 +1,3 @@
-import { validatedApiUrl, regionEndpoints } from './src/lib/config';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -60,7 +59,11 @@ import { Select } from './src/components/select';
 import { BudgetCalendar } from './src/components/budget-calendar';
 import { CurrencyPicker } from './src/components/currency-picker';
 import { load, persist, removeLegacyProviderKey } from './src/storage';
-import { chat, ChatResult } from './src/api';
+import { ChatResult } from './src/api';
+import { chatOnDevice } from './src/lib/device-ai';
+import { useDeviceAi } from './src/hooks/use-device-ai';
+import { useEntryClassification } from './src/hooks/use-entry-classification';
+import { expenseCategories } from './src/classification';
 import { useReceipts } from './src/hooks/use-receipts';
 import { ReceiptScanner } from './src/components/receipt-scanner';
 import { prepareReceiptImport, undoReceiptImport, ReceiptJob } from './src/receipts';
@@ -80,7 +83,7 @@ import {
 
 import { useAuth } from './src/hooks/use-auth';
 import { AuthScreen } from './src/components/auth-screen';
-import { Session, signOut } from './src/lib/auth';
+import { Session, signOut, authConfigured } from './src/lib/auth';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { PageContext, routes, Tab } from './src/page-context';
 type Form = {
@@ -92,6 +95,7 @@ type Form = {
   date: string;
   kind: Kind;
   category: string;
+  categoryEdited: boolean;
   goalId: string;
   recurring: boolean;
   initial: string;
@@ -110,22 +114,15 @@ const tabs: { name: Tab; icon: IconName }[] = [
   { name: 'Tools', icon: 'scan-outline' },
   { name: 'Settings', icon: 'settings-outline' },
 ];
-const categories = [
-  'Food & drinks',
-  'Groceries',
-  'Transport',
-  'Shopping',
-  'Health',
-  'Entertainment',
-  'Other',
-];
+const categories = [...expenseCategories];
 const errorText = (e: unknown) =>
   e instanceof Error ? e.message : 'Something went wrong. Please retry.';
-function AppContent({ session }: { session: Session }) {
+function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => void }) {
   const { width, fontScale } = useWindowDimensions(),
     wide = width >= 1100 && fontScale < 1.4,
     columns = width >= 900 && fontScale < 1.25,
     compact = width < 420 || fontScale > 1.15;
+  const localBudget = !!onSignIn;
   const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardVisible();
   const pathname = usePathname(),
@@ -158,30 +155,46 @@ function AppContent({ session }: { session: Session }) {
     [selectedDate, setSelectedDate] = useState(today()),
     [selectedPlanId, setSelectedPlanId] = useState<string | null>(null),
     [addingCurrency, setAddingCurrency] = useState(false),
-    [url, setUrl] = useState(''),
-    [checking, setChecking] = useState(false),
     [scanNote, setScanNote] = useState('');
   const [receiptUndo, setReceiptUndo] = useState<{ entries: Entry[]; jobs: ReceiptJob[] } | null>(
     null,
   );
   const receipts = useReceipts(s, setNotice, (jobs) => addReceiptJobs(jobs, true));
+  const deviceAi = useDeviceAi();
+  const entryClassification = useEntryClassification(
+    form?.title,
+    !!form &&
+      form.type === 'entry' &&
+      form.kind === 'expense' &&
+      !form.categoryEdited &&
+      deviceAi.available,
+    (category, title) =>
+      setForm((old) =>
+        old &&
+        old.type === 'entry' &&
+        old.kind === 'expense' &&
+        !old.categoryEdited &&
+        old.title === title
+          ? { ...old, category }
+          : old,
+      ),
+  );
   const queue = useRef(Promise.resolve()),
     chatScroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
   useEffect(() => {
-    load(session.uid)
+    load(session.uid, localBudget)
       .then((data) => {
         setS(data);
-        setUrl(data.apiUrl);
       })
       .catch((e) => setFatal(errorText(e)));
     void removeLegacyProviderKey();
-  }, [session.uid]);
+  }, [session.uid, localBudget]);
   useEffect(() => {
     if (!s) return;
     const snapshot = s;
     queue.current = queue.current
       .catch(() => {})
-      .then(() => persist(snapshot, session.uid))
+      .then(() => persist(snapshot, session.uid, localBudget))
       .then(() => setStorageError(''))
       .catch((e) =>
         setStorageError(
@@ -189,10 +202,8 @@ function AppContent({ session }: { session: Session }) {
             errorText(e),
         ),
       );
-  }, [s, session.uid]);
-  const fx = useExchangeRates(s?.apiUrl, s?.currency, (quote) =>
-    update((old) => ({ ...old, fx: quote })),
-  );
+  }, [s, session.uid, localBudget]);
+  const fx = useExchangeRates(s?.currency, (quote) => update((old) => ({ ...old, fx: quote })));
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(''), 4500);
@@ -210,7 +221,8 @@ function AppContent({ session }: { session: Session }) {
       amount: '',
       date: type === 'goal' ? addMonths(3) : today(),
       kind: 'expense',
-      category: categories[0],
+      category: 'Other',
+      categoryEdited: !!preset.existing || !!preset.category,
       goalId: s?.goals[0]?.id || '',
       recurring: true,
       initial: '0',
@@ -447,6 +459,10 @@ function AppContent({ session }: { session: Session }) {
   }
   async function send(text = chatInput) {
     if (busy || !text.trim()) return;
+    if (!deviceAi.available) {
+      setNotice(deviceAi.reason || 'On-device AI is unavailable.');
+      return;
+    }
     const messages: Message[] = [...state.messages, { role: 'user', content: text.trim() }];
     setBusy(true);
     setNotice('');
@@ -455,7 +471,7 @@ function AppContent({ session }: { session: Session }) {
     setProposal(null);
     update((old) => ({ ...old, messages }));
     try {
-      const result = await chat(state, messages);
+      const result = await chatOnDevice(messages, state.currency);
       update((old) => ({
         ...old,
         messages: [...messages, { role: 'assistant', content: result.message }],
@@ -1289,8 +1305,7 @@ function AppContent({ session }: { session: Session }) {
         <Card style={{ flex: 1, flexShrink: 1, minHeight: 0, padding: columns ? 20 : 14, gap: 12 }}>
           <View style={[u.between, { flexShrink: 0, flexWrap: 'nowrap', gap: 8 }]}>
             <Text style={[u.body, { flex: 1 }]}>
-              {state.aiMode === 'conversation' ? 'Conversation' : 'Planning'}
-              {state.research ? ' · Web research' : ''}
+              {deviceAi.available ? 'On-device AI' : 'AI unavailable'}
             </Text>
             {keyboardVisible && (
               <Pressable
@@ -1338,6 +1353,7 @@ function AppContent({ session }: { session: Session }) {
             style={{ flex: 1, minHeight: 0 }}
             contentContainerStyle={{ flexGrow: 1, gap: 16, paddingVertical: 8 }}
           >
+            {!deviceAi.available && <Text style={u.body}>{deviceAi.reason}</Text>}
             {s!.messages.length ? (
               s!.messages.map((msg, i) => (
                 <View key={i} style={[st.bubble, msg.role === 'user' && st.userBubble]}>
@@ -1477,7 +1493,11 @@ function AppContent({ session }: { session: Session }) {
               placeholderTextColor={C.muted}
               maxLength={6000}
             />
-            <Button disabled={busy || !chatInput.trim()} icon="arrow-up" onPress={() => send()}>
+            <Button
+              disabled={busy || !chatInput.trim() || !deviceAi.available}
+              icon="arrow-up"
+              onPress={() => send()}
+            >
               Send
             </Button>
           </View>
@@ -1520,32 +1540,6 @@ function AppContent({ session }: { session: Session }) {
         </View>
       </>
     );
-  }
-  async function saveSettings() {
-    try {
-      update((old) => ({ ...old, apiUrl: validatedApiUrl(url) }));
-      setNotice('Settings saved.');
-    } catch (e) {
-      setNotice(errorText(e));
-    }
-  }
-  async function checkServer() {
-    setChecking(true);
-    const controller = new AbortController(),
-      timer = setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch(url.replace(/\/$/, '') + '/health', {
-        signal: controller.signal,
-      });
-      const data = await response.json();
-      if (!response.ok || data.status !== 'ok') throw new Error('Server is not ready.');
-      setNotice('Backend connected · device-only storage.');
-    } catch {
-      setNotice('Cannot reach this backend. Check its URL, Wi-Fi, and CORS configuration.');
-    } finally {
-      clearTimeout(timer);
-      setChecking(false);
-    }
   }
   function settings() {
     const currencies = state.preferredCurrencies || [state.currency];
@@ -1638,125 +1632,41 @@ function AppContent({ session }: { session: Session }) {
             </Button>
           </Card>
           <Card>
-            <Text style={u.h2}>Service region</Text>
+            <Text style={u.h2}>On-device AI</Text>
             <Text style={u.body}>
-              Where AI and exchange-rate requests are processed. Currency preferences stay the same.
+              {deviceAi.available ? 'Available · Apple Intelligence' : deviceAi.reason}
             </Text>
-            {Object.entries(regionEndpoints)
-              .filter(([, endpoint]) => !!endpoint)
-              .map(([region, endpoint]) => (
-                <Pressable
-                  key={region}
-                  accessibilityRole="radio"
-                  accessibilityLabel={`Service region ${region}`}
-                  accessibilityState={{ checked: state.apiUrl === endpoint }}
-                  aria-checked={state.apiUrl === endpoint}
-                  onPress={() => {
-                    setUrl(endpoint!);
-                    update((old) => ({ ...old, apiUrl: validatedApiUrl(endpoint!) }));
-                  }}
-                  style={{
-                    minHeight: 56,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingVertical: 12,
-                    borderBottomWidth: 1,
-                    borderColor: C.line,
-                  }}
-                >
-                  <Text style={st.bold}>
-                    {region === 'US' ? 'United States · Central' : 'Singapore'}
-                  </Text>
-                  <Icon
-                    name={state.apiUrl === endpoint ? 'radio-button-on' : 'radio-button-off'}
-                    color={state.apiUrl === endpoint ? C.green : C.muted}
-                  />
-                </Pressable>
-              ))}
-            {__DEV__ && (
-              <>
-                <Field label="Backend URL" value={url} onChangeText={setUrl} keyboardType="url" />
-                <Button secondary onPress={saveSettings}>
-                  Save connection
-                </Button>
-                <Button secondary disabled={checking} onPress={checkServer}>
-                  {checking ? 'Checking…' : 'Test backend'}
-                </Button>
-              </>
-            )}
-          </Card>
-          <Card>
-            <Text style={u.h2}>AI mode</Text>
-            {(
-              [
-                {
-                  value: 'planning',
-                  title: 'Planning',
-                  description:
-                    'Estimates costs and suggests savings goals. Uses a lower-cost model.',
-                },
-                {
-                  value: 'conversation',
-                  title: 'Conversation',
-                  description:
-                    'Uses a more capable model for detailed questions and complex decisions.',
-                },
-              ] as const
-            ).map((mode) => (
-              <Pressable
-                key={mode.value}
-                accessibilityRole="radio"
-                accessibilityLabel={`AI mode ${mode.title}`}
-                accessibilityState={{ checked: (state.aiMode || 'planning') === mode.value }}
-                aria-checked={(state.aiMode || 'planning') === mode.value}
-                onPress={() => update((old) => ({ ...old, aiMode: mode.value }))}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  paddingVertical: 12,
-                  borderBottomWidth: 1,
-                  borderColor: C.line,
-                }}
-              >
-                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                  <Text style={st.bold}>{mode.title}</Text>
-                  <Text style={u.body}>{mode.description}</Text>
-                </View>
-                <Icon
-                  name={
-                    (state.aiMode || 'planning') === mode.value
-                      ? 'radio-button-on'
-                      : 'radio-button-off'
-                  }
-                  color={C.green}
-                />
-              </Pressable>
-            ))}
             <Text style={u.body}>
-              Applies to AI planner chat. Receipt OCR is separate; iPhone photos are read on-device.
+              Categorizes entries and receipts after OCR. Chat stays on-device. No cloud AI or API
+              keys.
             </Text>
-            <View style={[u.between, { flexWrap: 'nowrap' }]}>
-              <Text style={[st.bold, { flex: 1 }]}>Web price research</Text>
-              <Switch
-                accessibilityLabel="Research prices on the web"
-                value={state.research}
-                onValueChange={(research) => update((old) => ({ ...old, research }))}
-                trackColor={{ true: C.green, false: C.line }}
-              />
-            </View>
           </Card>
           <Card>
             <Text style={u.h2}>Account</Text>
-            <Button
-              secondary
-              onPress={() =>
-                void queue.current.finally(() => signOut()).catch((e) => setNotice(errorText(e)))
-              }
-            >
-              Sign out
-            </Button>
+            {onSignIn ? (
+              <>
+                <Text style={u.body}>Local budget · no account required</Text>
+                {authConfigured && (
+                  <Button
+                    secondary
+                    onPress={() =>
+                      void queue.current.finally(onSignIn).catch((e) => setNotice(errorText(e)))
+                    }
+                  >
+                    Sign in to an existing budget
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button
+                secondary
+                onPress={() =>
+                  void queue.current.finally(() => signOut()).catch((e) => setNotice(errorText(e)))
+                }
+              >
+                Sign out
+              </Button>
+            )}
           </Card>
           <Card>
             <Text style={u.h2}>Local data</Text>
@@ -2102,7 +2012,13 @@ function AppContent({ session }: { session: Session }) {
                   <Field
                     label={form.type === 'plan' ? 'Plan name' : 'Name'}
                     value={form.title}
-                    onChangeText={(title) => setForm({ ...form, title })}
+                    onChangeText={(title) =>
+                      setForm({
+                        ...form,
+                        title,
+                        ...(!form.categoryEdited ? { category: 'Other' } : {}),
+                      })
+                    }
                     placeholder={form.type === 'entry' ? 'Optional' : 'Name'}
                   />
                   {form.type !== 'entry' && (
@@ -2181,9 +2097,20 @@ function AppContent({ session }: { session: Session }) {
                       label="Category"
                       value={form.category}
                       options={categories.map((value) => ({ value, label: value }))}
-                      onChange={(category) => setForm({ ...form, category })}
+                      onChange={(category) => setForm({ ...form, category, categoryEdited: true })}
                     />
                   )}
+                  {form.type === 'entry' &&
+                    form.kind === 'expense' &&
+                    entryClassification?.status === 'working' && (
+                      <Text style={u.body}>Categorizing on-device…</Text>
+                    )}
+                  {form.type === 'entry' &&
+                    form.kind === 'expense' &&
+                    entryClassification &&
+                    ['unavailable', 'needs-input'].includes(entryClassification.status) && (
+                      <Text style={u.body}>Choose a category manually.</Text>
+                    )}
                   {form.type === 'entry' && form.kind === 'saving' && (
                     <Select
                       label="Savings goal"
@@ -2237,6 +2164,7 @@ function AppContent({ session }: { session: Session }) {
                     </Text>
                   )}
                   <Button
+                    disabled={entryClassification?.status === 'working'}
                     onPress={() => {
                       saveForm();
                     }}
@@ -2284,8 +2212,16 @@ function AppContent({ session }: { session: Session }) {
     </SafeAreaView>
   );
 }
+const localSession: Session = {
+  uid: 'local-budget',
+  email: '',
+  idToken: '',
+  refreshToken: '',
+  expiresAt: Number.MAX_SAFE_INTEGER,
+};
 export default function App() {
   const auth = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
   return (
     <SafeAreaProvider>
       {auth.loading ? (
@@ -2294,8 +2230,10 @@ export default function App() {
         </View>
       ) : auth.session ? (
         <AppContent key={auth.session.uid} session={auth.session} />
+      ) : showAuth ? (
+        <AuthScreen onUseLocal={() => setShowAuth(false)} />
       ) : (
-        <AuthScreen />
+        <AppContent key="local-budget" session={localSession} onSignIn={() => setShowAuth(true)} />
       )}
     </SafeAreaProvider>
   );

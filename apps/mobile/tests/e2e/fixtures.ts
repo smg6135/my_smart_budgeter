@@ -14,7 +14,7 @@ export const test = base.extend({
         }),
       );
     });
-    await page.route('**/v1/fx/rates?**', (route) =>
+    await page.route('**/v2/exchange-rates?**', (route) =>
       route.fulfill({ status: 503, json: { detail: 'Rates offline in test' } }),
     );
     await use(page);

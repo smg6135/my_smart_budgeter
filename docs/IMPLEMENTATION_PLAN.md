@@ -1,3 +1,18 @@
+# Current implementation: free, on-device AI
+
+1. Separate native OCR from the native AI service.
+2. Use the AI service for receipt and typed-entry categorization; preserve manual overrides.
+3. Remove cloud AI calls, cloud OCR controls and rules/parser classification fallback.
+4. Run chat locally; keep financial calculations in code.
+5. Allow account-free budgets and public key-free FX; preserve existing account data separately.
+6. Validate financial behavior, unsupported-device UX, native compilation and a new TestFlight binary.
+
+Steps 1–5 are implemented; validation/release is underway. See [workflow](RECEIPT_OCR.md). Legacy GCP resources remain separate and have not been deleted.
+
+---
+
+## Previous implementation history
+
 # Implementation status
 
 Deployed to `normies-main` on 2026-11-08.

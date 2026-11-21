@@ -21,14 +21,10 @@ const rates = {
   CHF: 0.65,
 };
 test.beforeEach(async ({ page }) => {
-  await page.route('**/v1/fx/rates?base=SGD', (route) =>
+  await page.route('**/v2/exchange-rates?currency=SGD', (route) =>
     route.fulfill({
       json: {
-        base: 'SGD',
-        rates,
-        fetchedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 60000).toISOString(),
-        source: 'Coinbase',
+        data: { currency: 'SGD', rates },
       },
     }),
   );
@@ -72,8 +68,8 @@ test('books original currency once, converts reports, and preserves expense audi
 test('offline foreign entries need an explicit rate and missing rates never relabel totals', async ({
   page,
 }) => {
-  await page.unroute('**/v1/fx/rates?base=SGD');
-  await page.route('**/v1/fx/rates?base=SGD', (route) =>
+  await page.unroute('**/v2/exchange-rates?currency=SGD');
+  await page.route('**/v2/exchange-rates?currency=SGD', (route) =>
     route.fulfill({ status: 503, json: { detail: 'Rates unavailable for this test.' } }),
   );
   await page.goto('/');
@@ -107,14 +103,10 @@ test('sample budget keeps loaded rates and later quotes never rewrite saved expe
   await select(page, 'Entry currency', 'SGD', 'USD');
   await expect(page.getByText('Budget impact: SGD 100.00')).toBeVisible();
   await page.getByRole('button', { name: 'Save entry' }).click();
-  await page.route('**/v1/fx/rates?base=SGD', (route) =>
+  await page.route('**/v2/exchange-rates?currency=SGD', (route) =>
     route.fulfill({
       json: {
-        base: 'SGD',
-        rates: { ...rates, USD: 0.5 },
-        fetchedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 60000).toISOString(),
-        source: 'Coinbase',
+        data: { currency: 'SGD', rates: { ...rates, USD: 0.5 } },
       },
     }),
   );

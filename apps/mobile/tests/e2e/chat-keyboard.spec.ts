@@ -91,43 +91,19 @@ test('chat composer stays visible while the viewport shrinks and history scrolls
   }
 });
 
-test('a long AI proposal cannot push the composer below the visible screen', async ({ page }) => {
+test('unsupported AI preserves the draft and never calls a cloud model', async ({ page }) => {
+  let calls = 0;
+  await page.route('**/v1/planner/chat', (route) => {
+    calls++;
+    return route.abort();
+  });
   await page.setViewportSize({ width: 320, height: 480 });
-  await page.route('**/v1/planner/chat', (route) =>
-    route.fulfill({
-      json: {
-        message:
-          'Here is your plan.\n' + 'This is a long reply with detailed estimates. '.repeat(30),
-        proposal: {
-          title: 'Travel budget',
-          amount: 1200,
-          deadline: '2028-12-01',
-          emoji: '✈️',
-          breakdown: Array.from({ length: 12 }, (_, i) => `Item ${i + 1}: SGD 100`),
-        },
-        sources: [{ title: 'Travel costs', url: 'https://example.com/travel' }],
-      },
-    }),
-  );
   await page.goto('/planner');
-  await page.bringToFront();
+  await settleChatLayout(page);
   const input = page.getByLabel('Message your planner');
-  await expect(input).toBeVisible();
-  await settleChatLayout(page);
-  await input.click();
-  await expect(input).toBeFocused();
   await input.fill('Plan a trip');
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   await expect(input).toHaveValue('Plan a trip');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(input).toHaveValue('');
-  await page.getByRole('button', { name: 'Review & add savings goal' }).scrollIntoViewIfNeeded();
-  await input.fill('I can still write a follow-up.');
-  await expect(input).toHaveValue('I can still write a follow-up.');
-  await settleChatLayout(page);
-  const [composer, footer] = await Promise.all([
-    page.getByTestId('chat-composer').boundingBox(),
-    page.getByTestId('bottom-navigation').boundingBox(),
-  ]);
-  expect(composer!.y + composer!.height).toBeLessThanOrEqual(footer!.y + 1);
+  expect(calls).toBe(0);
   expect(await textProblems(page)).toEqual([]);
 });

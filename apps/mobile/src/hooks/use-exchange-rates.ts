@@ -2,11 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { FxSnapshot } from '../currency';
 import { getRates } from '../api';
-export function useExchangeRates(
-  apiUrl: string | undefined,
-  base: string | undefined,
-  onQuote: (quote: FxSnapshot) => void,
-) {
+export function useExchangeRates(base: string | undefined, onQuote: (quote: FxSnapshot) => void) {
   const [loading, setLoading] = useState(false),
     [error, setError] = useState('');
   const callback = useRef(onQuote),
@@ -15,7 +11,7 @@ export function useExchangeRates(
     callback.current = onQuote;
   }, [onQuote]);
   useEffect(() => {
-    if (!apiUrl || !base) return;
+    if (!base) return;
     let disposed = false,
       inFlight = false;
     let controller: AbortController | undefined;
@@ -25,7 +21,7 @@ export function useExchangeRates(
       setLoading(true);
       controller = new AbortController();
       try {
-        const quote = await getRates(apiUrl!, base!, controller.signal);
+        const quote = await getRates(base!, controller.signal);
         if (!disposed) {
           callback.current(quote);
           setError('');
@@ -51,6 +47,6 @@ export function useExchangeRates(
       clearInterval(timer);
       listener.remove();
     };
-  }, [apiUrl, base]);
+  }, [base]);
   return { loading, error, refresh: () => refreshRef.current() };
 }

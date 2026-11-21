@@ -4,9 +4,10 @@ import { Platform } from 'react-native';
 import { validatedApiUrl } from './lib/config';
 import { State, initialState } from './finance';
 import { migratePlans } from './plans';
-const storageKey = (uid: string) => 'pocket-budget.v2.' + encodeURIComponent(uid);
-export async function load(uid: string): Promise<State> {
-  const raw = await AsyncStorage.getItem(storageKey(uid));
+const storageKey = (uid: string, local = false) =>
+  local ? 'pocket-budget.local.v1' : 'pocket-budget.v2.' + encodeURIComponent(uid);
+export async function load(uid: string, local = false): Promise<State> {
+  const raw = await AsyncStorage.getItem(storageKey(uid, local));
   if (!raw) return migratePlans({ ...initialState });
   const data = JSON.parse(raw);
   if (
@@ -23,8 +24,8 @@ export async function load(uid: string): Promise<State> {
   } catch {}
   return migratePlans({ ...initialState, ...account, apiUrl });
 }
-export const persist = (s: State, uid: string) =>
-  AsyncStorage.setItem(storageKey(uid), JSON.stringify(s));
+export const persist = (s: State, uid: string, local = false) =>
+  AsyncStorage.setItem(storageKey(uid, local), JSON.stringify(s));
 export async function removeLegacyProviderKey() {
   if (Platform.OS === 'web') sessionStorage.removeItem('pocket-openai-key');
   else await SecureStore.deleteItemAsync('pocket-openai-key');

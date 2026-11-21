@@ -2,6 +2,7 @@ import { ScanResult } from './api';
 import { convertMinor, freshQuote, parseAmount, rateFor, supportedCurrency } from './currency';
 import { Entry, State, today, validDate } from './finance';
 import type { ReceiptAudit } from './receipt-audit';
+import { isExpenseCategory } from './classification';
 export const RECEIPT_LIMIT = 20;
 export const RECEIPT_MAX_BYTES = 8 * 1024 * 1024;
 export const RECEIPT_MIME_TYPES = [
@@ -41,7 +42,7 @@ export type ReceiptDraft = {
 export type ReceiptJob = ReceiptFile & {
   status: 'pending' | 'processing' | 'ready' | 'error' | 'saved' | 'duplicate';
   result?: ScanResult;
-  engine?: 'device' | 'cloud';
+  engine?: 'device';
   recognizedText?: string;
   error?: string;
   reviewError?: string;
@@ -63,6 +64,7 @@ export function receiptDraft(result?: ScanResult): ReceiptDraft {
 export function receiptEntry(job: ReceiptJob, s: State): Entry {
   const r = job.draft || job.result;
   if (!r) throw new Error('Scan this receipt first.');
+  if (!isExpenseCategory(r.category)) throw new Error('Choose a category.');
   if (!r.merchant.trim()) throw new Error('Enter a merchant.');
   if (!validDate(r.date) || r.date > today()) throw new Error('Review the receipt date.');
   if (!supportedCurrency(r.currency)) throw new Error('Review the receipt currency.');

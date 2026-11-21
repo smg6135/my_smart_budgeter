@@ -43,7 +43,7 @@ with Path("/tmp/pocket-ios-runtime.log").open("w") as log:
                 print(checked.stdout.strip())
                 break
         else:
-            raise RuntimeError("Release app did not reach the sign-in screen. Inspect the screenshot/runtime log.")
+            raise RuntimeError("Release app did not reach the local budget overview. Inspect the screenshot/runtime log.")
     finally:
         stream.terminate()
         stream.wait(timeout=10)

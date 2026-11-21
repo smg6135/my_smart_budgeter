@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -67,21 +66,6 @@ export function ReceiptScanner({
     focused.current = null;
     batch.closeReview();
   };
-  const improve = () =>
-    Alert.alert(
-      'Cloud analysis',
-      `Upload ${unresolved.length} unclear receipt${unresolved.length === 1 ? '' : 's'} for cloud analysis?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Upload',
-          onPress: () => {
-            close();
-            void batch.improve();
-          },
-        },
-      ],
-    );
   const valid = unresolved.filter((job) => {
     try {
       receiptEntry(job, state);
@@ -98,6 +82,15 @@ export function ReceiptScanner({
       return '';
     }
   };
+  if (!batch.deviceOcrAvailable)
+    return (
+      <Card>
+        <Text style={u.h2}>Receipts</Text>
+        <Text style={u.body}>
+          On-device scanning is available in the iOS app. Add entries manually here.
+        </Text>
+      </Card>
+    );
   return (
     <Card>
       <Text style={u.h2}>Receipts</Text>
@@ -125,14 +118,7 @@ export function ReceiptScanner({
           </View>
         )}
       </View>
-      <Text style={u.body}>
-        {batch.jobs.some((job) => job.engine === 'cloud')
-          ? 'Cloud analysis used'
-          : batch.deviceOcr
-            ? 'On-device by default'
-            : 'Cloud analysis'}{' '}
-        · Up to 20 photos
-      </Text>
+      <Text style={u.body}>On-device OCR → AI classification · Up to 20 photos</Text>
       {batch.processing && (
         <View style={u.row}>
           <ActivityIndicator color={C.green} />
@@ -231,7 +217,7 @@ export function ReceiptScanner({
                 let error =
                   job.reviewError ||
                   job.error ||
-                  (job.audit?.status === 'reviewed' && !job.audit.approved ? job.audit.reason : '');
+                  (job.audit?.status !== 'classified' ? job.audit?.reason : '');
                 if (job.status !== 'error') {
                   try {
                     receiptEntry(job, state);
@@ -403,11 +389,6 @@ export function ReceiptScanner({
               >
                 Add expenses ({valid})
               </Button>
-              {batch.deviceOcr && unresolved.length > 0 && (
-                <Button small secondary disabled={batch.processing} onPress={improve}>
-                  Try cloud analysis
-                </Button>
-              )}
             </View>
           </View>
         </KeyboardAvoidingView>

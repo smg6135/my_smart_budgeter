@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { authConfigured, googleLogin, resetPassword, signIn } from '../lib/auth';
 import { Button, Card, Field, C, styles as u } from './ui';
-export function AuthScreen() {
+export function AuthScreen({ onUseLocal }: { onUseLocal?: () => void } = {}) {
   useEffect(() => {
     if (Platform.OS === 'web' && process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)
       void import('../lib/google').then((module) => module.prepareGoogle()).catch(() => {});
@@ -79,6 +79,11 @@ export function AuthScreen() {
               >
                 Reset password
               </Button>
+              {onUseLocal && (
+                <Button secondary onPress={onUseLocal}>
+                  Use local budget
+                </Button>
+              )}
             </Card>
           </View>
         </ScrollView>

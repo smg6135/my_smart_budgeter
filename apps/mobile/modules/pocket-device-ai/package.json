@@ -1,0 +1,9 @@
+{
+  "name": "pocket-device-ai",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "description": "On-device budget classification with Apple Foundation Models",
+  "license": "MIT",
+  "author": "Pocket Budget"
+}
