@@ -142,7 +142,8 @@ def test_expired_proposal_cannot_be_added(client):
         ("application/pdf", b"%PDF-1.7 contents", "input_file"),
     ],
 )
-def test_receipt_inputs_and_structured_review(client, mime, raw, content_type):
+@pytest.mark.parametrize("notes", ["", "Review printed date"])
+def test_receipt_inputs_and_structured_review(client, mime, raw, content_type, notes):
     app.state.client.post.return_value = response(
         {
             "merchant": "Cafe",
@@ -150,7 +151,7 @@ def test_receipt_inputs_and_structured_review(client, mime, raw, content_type):
             "currency": "SGD",
             "date": "2026-10-01",
             "category": "Food & drinks",
-            "notes": "Review date",
+            "notes": notes,
         }
     )
     result = client.post(
@@ -160,6 +161,7 @@ def test_receipt_inputs_and_structured_review(client, mime, raw, content_type):
     )
     assert result.status_code == 200
     assert result.json()["amount"] == 12.5
+    assert result.json()["notes"] == notes
     assert (
         app.state.client.post.call_args.kwargs["json"]["input"][0]["content"][1]["type"]
         == content_type
