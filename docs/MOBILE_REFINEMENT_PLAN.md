@@ -33,3 +33,9 @@ Remaining device acceptance:
 2. Verify Photos opens the native multi-select gallery and HEIC batches scan on-device. Check camera and receipt review.
 3. Verify the iOS sign/currency wheels, bottom spacing and daily allowance on the physical phone.
 4. Activate another plan and navigate to past calendar dates. Confirm allocation, summaries and saved data after reopening.
+
+## Chat keyboard correction
+
+Build 4's chat composer was inside a long page scroll view with no native keyboard avoidance. The correction gives chat a bounded viewport, independently scrollable messages/proposals and a pinned multiline composer. Native keyboard padding moves the composer above the keyboard; header/tab chrome hides while typing and a dismiss control restores it. Input height is capped against available space, drafts survive viewport changes, and chat errors appear within the visible message area.
+
+New regression checks cover shrinking/restoring phone viewport height, scrolling long history while typing, and long AI proposals. The focused Chrome/Safari checks, lint, typecheck and 40 unit tests pass; full browser/native release checks and build 5 are pending. Browser viewport tests do not operate the real iOS keyboard; confirm keyboard appearance/dismissal, caret visibility and Send on the new TestFlight build.

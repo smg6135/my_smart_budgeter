@@ -2,6 +2,7 @@ import { validatedApiUrl, regionEndpoints } from './src/lib/config';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -45,6 +46,7 @@ import {
   supportedCurrency,
   units,
 } from './src/currency';
+import { useKeyboardVisible } from './src/hooks/use-keyboard-visible';
 import { useExchangeRates } from './src/hooks/use-exchange-rates';
 import {
   addPlan,
@@ -125,11 +127,13 @@ function AppContent({ session }: { session: Session }) {
     columns = width >= 900 && fontScale < 1.25,
     compact = width < 420 || fontScale > 1.15;
   const insets = useSafeAreaInsets();
+  const keyboardVisible = useKeyboardVisible();
   const pathname = usePathname(),
     router = useRouter();
   const tab = (Object.keys(routes) as Tab[]).find((k) => routes[k] === pathname) || 'Overview';
   function setTab(next: Tab) {
     if (next === 'Plan') setSelectedPlanId(null);
+    Keyboard.dismiss();
     router.navigate(routes[next] as never);
   }
   const [s, setS] = useState<State | null>(null),
@@ -145,6 +149,8 @@ function AppContent({ session }: { session: Session }) {
     } | null>(null),
     [busy, setBusy] = useState(false),
     [chatInput, setChatInput] = useState(''),
+    [chatInputHeight, setChatInputHeight] = useState(54),
+    [chatAvailableHeight, setChatAvailableHeight] = useState(0),
     [proposal, setProposal] = useState<(ChatResult & { currency: string }) | null>(null),
     [sources, setSources] = useState<ChatResult['sources']>([]),
     [filters, setFilters] = useState({ kind: 'All', category: 'All', from: '', to: '' }),
@@ -193,6 +199,7 @@ function AppContent({ session }: { session: Session }) {
     setS((old) => (old ? fn(old) : old));
   }
   function open(type: Form['type'], preset: Partial<Form> = {}) {
+    Keyboard.dismiss();
     setFormError('');
     setForm({
       type,
@@ -438,6 +445,7 @@ function AppContent({ session }: { session: Session }) {
     setBusy(true);
     setNotice('');
     setChatInput('');
+    setChatInputHeight(54);
     setProposal(null);
     update((old) => ({ ...old, messages }));
     try {
@@ -1270,25 +1278,37 @@ function AppContent({ session }: { session: Session }) {
   }
   function planner() {
     return (
-      <>
-        {heading('AI planner')}
-        <Card style={{ padding: columns ? 28 : 18 }}>
-          <View style={u.between}>
-            <View style={u.row}>
-              <View style={st.entryIcon}>
-                <Icon name="sparkles-outline" color={C.green} />
-              </View>
-              <View>
-                <Text style={u.body}>
-                  {s!.research ? 'Web research enabled' : 'Estimates only · web research off'}
-                </Text>
-              </View>
-            </View>
+      <View
+        testID="planner-chat"
+        onLayout={(event) => setChatAvailableHeight(event.nativeEvent.layout.height)}
+        style={{ flex: 1, minHeight: 0 }}
+      >
+        <Text accessibilityRole="header" style={[u.h1, { marginBottom: 12, flexShrink: 0 }]}>
+          AI planner
+        </Text>
+        <Card style={{ flex: 1, flexShrink: 1, minHeight: 0, padding: columns ? 20 : 14, gap: 12 }}>
+          <View style={[u.between, { flexShrink: 0, flexWrap: 'nowrap', gap: 8 }]}>
+            <Text style={[u.body, { flex: 1 }]}>
+              {state.aiMode === 'conversation' ? 'Conversation' : 'Planning'}
+              {state.research ? ' · Web research' : ''}
+            </Text>
+            {keyboardVisible && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss keyboard"
+                onPress={Keyboard.dismiss}
+                style={st.iconButton}
+              >
+                <Icon name="chevron-down" color={C.muted} />
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Clear conversation"
               disabled={busy}
-              onPress={() =>
+              style={st.iconButton}
+              onPress={() => {
+                Keyboard.dismiss();
                 setConfirm({
                   title: 'Clear chat?',
                   body: 'The current chat will be removed from this device. Saved goals stay in your budget.',
@@ -1297,23 +1317,24 @@ function AppContent({ session }: { session: Session }) {
                     setProposal(null);
                     setSources([]);
                   },
-                })
-              }
+                });
+              }}
             >
               <Icon name="refresh-outline" size={20} color={C.muted} />
             </Pressable>
           </View>
-          <Text style={u.body}>
-            {state.aiMode === 'conversation'
-              ? 'Conversation · detailed answers'
-              : 'Planning · estimates and savings targets'}
-          </Text>
-          <View style={u.divider} />
           <ScrollView
             ref={chatScroll}
+            testID="page-scroll"
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
+            automaticallyAdjustKeyboardInsets={false}
+            onLayout={() => chatScroll.current?.scrollToEnd({ animated: false })}
             onContentSizeChange={() => chatScroll.current?.scrollToEnd({ animated: true })}
-            style={{ maxHeight: 480 }}
-            contentContainerStyle={{ gap: 16, paddingVertical: 8 }}
+            style={{ flex: 1, minHeight: 0 }}
+            contentContainerStyle={{ flexGrow: 1, gap: 16, paddingVertical: 8 }}
           >
             {s!.messages.length ? (
               s!.messages.map((msg, i) => (
@@ -1366,58 +1387,88 @@ function AppContent({ session }: { session: Session }) {
                 <Text style={u.body}>Calculating…</Text>
               </View>
             )}
-          </ScrollView>
-          {sources.length > 0 && (
-            <View style={{ gap: 8 }}>
-              <Label>Research sources</Label>
-              {sources.map((source, i) => (
-                <Pressable
-                  key={i}
-                  accessibilityRole="link"
-                  onPress={() => Linking.openURL(source.url)}
-                >
-                  <Text style={st.textLink}>{source.title} ↗</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-          {proposal?.proposal && (
-            <Card style={{ backgroundColor: C.mint }}>
-              <Text style={u.h2}>
-                {proposal.proposal.emoji} {proposal.proposal.title}
-              </Text>
-              <Text style={u.amount}>
-                {money(
-                  Math.round(proposal.proposal.amount * units(proposal.currency)),
-                  proposal.currency,
-                )}
-              </Text>
-              {proposal.proposal.breakdown.map((line, i) => (
-                <Text key={i} style={u.body}>
-                  • {line}
+            {sources.length > 0 && (
+              <View style={{ gap: 8 }}>
+                <Label>Research sources</Label>
+                {sources.map((source, i) => (
+                  <Pressable
+                    key={i}
+                    accessibilityRole="link"
+                    onPress={() => Linking.openURL(source.url)}
+                  >
+                    <Text style={st.textLink}>{source.title} ↗</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {proposal?.proposal && (
+              <Card style={{ backgroundColor: C.mint }}>
+                <Text style={u.h2}>
+                  {proposal.proposal.emoji} {proposal.proposal.title}
                 </Text>
-              ))}
-              <Button
-                disabled={proposal.currency !== s!.currency}
-                onPress={() => {
-                  const p = proposal.proposal!;
-                  open('goal', {
-                    title: p.title,
-                    amount: p.amount.toFixed(decimals(state.currency)),
-                    date: p.deadline,
-                    emoji: p.emoji,
-                  });
-                }}
-              >
-                Review & add savings goal
-              </Button>
-            </Card>
-          )}
-          <View style={[u.row, { alignItems: 'flex-end' }]}>
+                <Text style={u.amount}>
+                  {money(
+                    Math.round(proposal.proposal.amount * units(proposal.currency)),
+                    proposal.currency,
+                  )}
+                </Text>
+                {proposal.proposal.breakdown.map((line, i) => (
+                  <Text key={i} style={u.body}>
+                    • {line}
+                  </Text>
+                ))}
+                <Button
+                  disabled={proposal.currency !== s!.currency}
+                  onPress={() => {
+                    const p = proposal.proposal!;
+                    open('goal', {
+                      title: p.title,
+                      amount: p.amount.toFixed(decimals(state.currency)),
+                      date: p.deadline,
+                      emoji: p.emoji,
+                    });
+                  }}
+                >
+                  Review & add savings goal
+                </Button>
+              </Card>
+            )}
+            {!!notice && (
+              <Text accessibilityRole="alert" style={[u.body, { color: C.red }]}>
+                {notice}
+              </Text>
+            )}
+          </ScrollView>
+          <View
+            testID="chat-composer"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-end',
+              gap: 8,
+              flexShrink: 0,
+              minWidth: 0,
+            }}
+          >
             <TextInput
               accessibilityLabel="Message your planner"
               multiline
-              style={[u.input, { flex: 1, minHeight: 54, maxHeight: 130 }]}
+              style={[
+                u.input,
+                {
+                  flex: 1,
+                  width: undefined,
+                  minHeight: 54,
+                  height: Math.min(
+                    chatInputHeight,
+                    Math.max(54, Math.min(120, chatAvailableHeight * 0.3 || 120)),
+                  ),
+                  textAlignVertical: 'top',
+                },
+              ]}
+              scrollEnabled
+              onContentSizeChange={(event) =>
+                setChatInputHeight(Math.max(54, event.nativeEvent.contentSize.height))
+              }
               value={chatInput}
               onChangeText={setChatInput}
               placeholder="Describe a purchase or trip"
@@ -1429,7 +1480,7 @@ function AppContent({ session }: { session: Session }) {
             </Button>
           </View>
         </Card>
-      </>
+      </View>
     );
   }
   function tools() {
@@ -1760,7 +1811,12 @@ function AppContent({ session }: { session: Session }) {
   return (
     <SafeAreaView style={st.safe} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
-      <View style={st.shell}>
+      <KeyboardAvoidingView
+        style={st.shell}
+        behavior="padding"
+        enabled={Platform.OS !== 'web' && tab === 'AI planner' && !form && !confirm}
+        keyboardVerticalOffset={0}
+      >
         {wide && (
           <View style={st.sidebar}>
             <View style={st.brand}>
@@ -1792,7 +1848,7 @@ function AppContent({ session }: { session: Session }) {
           </View>
         )}
         <View style={{ flex: 1, minWidth: 0 }}>
-          {!wide && (
+          {!wide && !(tab === 'AI planner' && keyboardVisible) && (
             <View style={st.mobileHeader}>
               <View style={u.row}>
                 <Icon name="wallet-outline" color={C.green} size={23} />
@@ -1815,25 +1871,52 @@ function AppContent({ session }: { session: Session }) {
               </Text>
             </View>
           )}
-          <ScrollView
-            key={tab}
-            testID="page-scroll"
-            style={{ flex: 1 }}
-            contentInsetAdjustmentBehavior="never"
-            automaticallyAdjustContentInsets={false}
-            contentContainerStyle={{
-              padding: wide ? 32 : 16,
-              paddingTop: wide ? 38 : 18,
-              paddingBottom: Platform.OS === 'web' ? 24 : 12,
-            }}
-          >
-            <View style={{ maxWidth: 1100, minWidth: 0, width: '100%', alignSelf: 'center' }}>
-              <PageContext.Provider value={renderPage}>
-                <Slot />
-              </PageContext.Provider>
+          {tab === 'AI planner' ? (
+            <View
+              style={{
+                flex: 1,
+                minHeight: 0,
+                paddingHorizontal: wide ? 32 : 16,
+                paddingTop: 12,
+                paddingBottom: 12,
+              }}
+            >
+              <View
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  maxWidth: 1100,
+                  width: '100%',
+                  alignSelf: 'center',
+                }}
+              >
+                <PageContext.Provider value={renderPage}>
+                  <Slot />
+                </PageContext.Provider>
+              </View>
             </View>
-          </ScrollView>
-          {!wide && (
+          ) : (
+            <ScrollView
+              key={tab}
+              testID="page-scroll"
+              keyboardShouldPersistTaps="handled"
+              style={{ flex: 1 }}
+              contentInsetAdjustmentBehavior="never"
+              automaticallyAdjustContentInsets={false}
+              contentContainerStyle={{
+                padding: wide ? 32 : 16,
+                paddingTop: wide ? 38 : 18,
+                paddingBottom: Platform.OS === 'web' ? 24 : 12,
+              }}
+            >
+              <View style={{ maxWidth: 1100, minWidth: 0, width: '100%', alignSelf: 'center' }}>
+                <PageContext.Provider value={renderPage}>
+                  <Slot />
+                </PageContext.Provider>
+              </View>
+            </ScrollView>
+          )}
+          {!wide && !(tab === 'AI planner' && keyboardVisible) && (
             <SafeAreaView
               edges={['bottom']}
               testID="bottom-navigation"
@@ -1882,8 +1965,8 @@ function AppContent({ session }: { session: Session }) {
             </SafeAreaView>
           )}
         </View>
-      </View>
-      {!!notice && (
+      </KeyboardAvoidingView>
+      {!!notice && tab !== 'AI planner' && (
         <Pressable accessibilityRole="alert" onPress={() => setNotice('')} style={st.toast}>
           <Text style={{ fontSize: 13, color: '#fff', lineHeight: 20, flex: 1 }}>{notice}</Text>
           <Icon name="close-outline" color="#fff" size={18} />
