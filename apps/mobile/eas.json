@@ -7,6 +7,14 @@
       "ios": { "image": "latest" }
     },
     "simulator": { "extends": "development", "ios": { "simulator": true, "image": "latest" } },
+    "validation": {
+      "extends": "production",
+      "distribution": "internal",
+      "autoIncrement": false,
+      "developmentClient": false,
+      "env": { "EXPO_PUBLIC_LOCAL_AI_SMOKE": "1" },
+      "ios": { "simulator": true, "buildConfiguration": "Release", "image": "latest" }
+    },
     "production": {
       "distribution": "store",
       "autoIncrement": true,

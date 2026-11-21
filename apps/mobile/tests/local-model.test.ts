@@ -9,6 +9,7 @@ import {
   receiptReviewMatches,
 } from '../src/local-ai-prompts';
 import { localModel } from '../src/local-model';
+import { localCompletionText, localGenerationOptions } from '../src/local-model-output';
 
 const model: ModelSpec = {
   id: 'test',
@@ -17,6 +18,18 @@ const model: ModelSpec = {
   bytes: 100,
   sha256: 'pinned',
 };
+test('local responses use parsed answer content, keep reasoning out, and disable thinking explicitly', () => {
+  assert.equal(localGenerationOptions.enable_thinking, false);
+  const output = {
+    text: '<think>private reasoning</think>\n{"category":"transport"}',
+    content: '{"category":"transport"}',
+  };
+  assert.equal(readCategory(localCompletionText(output)).status, 'classified');
+  assert.equal(localCompletionText(output), output.content);
+  assert.throws(() => localCompletionText({ ...output, truncated: true }));
+  assert.throws(() => localCompletionText({ ...output, interrupted: true }));
+  assert.throws(() => localCompletionText({ text: 'reasoning only', content: '' }));
+});
 function fixture() {
   const files = new Map<string, string>();
   const calls: string[] = [];

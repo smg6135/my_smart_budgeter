@@ -23,11 +23,13 @@ import {
   type LocalMessage,
 } from '../local-ai-prompts';
 import type { LlamaContext } from 'llama.rn';
+import { localCompletionText, localGenerationOptions } from '../local-model-output';
 
 const missing = 'Install the latest mobile build to use local AI.';
 const runtimePresent = () => !!native && !!TurboModuleRegistry.get('RNLlama');
 let systemCheck: Promise<DeviceAiAvailability> | undefined;
 async function systemAvailability(): Promise<DeviceAiAvailability> {
+  if (process.env.EXPO_PUBLIC_LOCAL_AI_SMOKE === '1') return { available: false };
   if (!native) return { available: false, reason: missing };
   if (!systemCheck) {
     systemCheck = native.availability().catch(() => ({ available: false }));
@@ -66,6 +68,8 @@ export const downloadDeviceAi = () => modelStore.ensure(true, true);
 export const pauseDeviceAi = () => modelStore.pause();
 
 let context: LlamaContext | undefined;
+let smokeTrace: unknown;
+export const deviceAiSmokeTrace = () => smokeTrace;
 let idle: ReturnType<typeof setTimeout> | undefined;
 let queue: Promise<unknown> = Promise.resolve();
 function serial<T>(task: () => Promise<T>): Promise<T> {
@@ -117,11 +121,7 @@ async function generate(messages: LocalMessage[], schema?: object): Promise<stri
       const format = schema
         ? { type: 'json_schema' as const, json_schema: { strict: true, schema } }
         : undefined;
-      const options = {
-        jinja: true,
-        chat_template_kwargs: { enable_thinking: false },
-        response_format: format,
-      };
+      const options = { ...localGenerationOptions, response_format: format };
       const formatted = await context.getFormattedChat(messages, undefined, options);
       const tokens = await context.tokenize(formatted.prompt);
       if (AppState.currentState === 'background' || AppState.currentState === 'inactive')
@@ -136,9 +136,16 @@ async function generate(messages: LocalMessage[], schema?: object): Promise<stri
         n_predict: schema === receiptReviewSchema ? 128 : schema ? 48 : 192,
         stop: ['<|im_end|>', '<|endoftext|>'],
       });
-      if (output.truncated || output.stopped_limit)
-        throw new Error('Local AI could not finish. Try a shorter message.');
-      return output.text.trim();
+      if (process.env.EXPO_PUBLIC_LOCAL_AI_SMOKE === '1') {
+        smokeTrace = {
+          raw: output.text,
+          content: output.content,
+          reasoning: output.reasoning_content,
+          truncated: output.truncated,
+          stopped_limit: output.stopped_limit,
+        };
+      }
+      return localCompletionText(output);
     } finally {
       idle = setTimeout(suspendDeviceAi, 60000);
     }

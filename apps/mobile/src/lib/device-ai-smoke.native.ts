@@ -1,6 +1,11 @@
 // CI-only synthetic inputs. No routes, account data or ledger mutations.
 import * as FileSystem from 'expo-file-system/legacy';
-import { classifyEntry, classifyReceipt, downloadDeviceAi } from './device-ai.native';
+import {
+  classifyEntry,
+  classifyReceipt,
+  downloadDeviceAi,
+  deviceAiSmokeTrace,
+} from './device-ai.native';
 
 export async function runDeviceAiSmoke() {
   const file = `${FileSystem.documentDirectory}pocket-local-ai-smoke.json`;
@@ -53,7 +58,7 @@ export async function runDeviceAiSmoke() {
   } catch (error) {
     await FileSystem.writeAsStringAsync(
       file,
-      JSON.stringify({ status: 'failed', error: String(error) }),
+      JSON.stringify({ status: 'failed', error: String(error), trace: deviceAiSmokeTrace() }),
     );
   }
 }
