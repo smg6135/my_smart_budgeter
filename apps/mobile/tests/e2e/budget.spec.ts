@@ -97,7 +97,7 @@ test('on-device AI has no cloud mode or price research control', async ({ page }
   await expect(page.getByText('On-device AI', { exact: true })).toBeVisible();
   await expect(
     page.getByText(
-      'Categorizes entries and receipts after OCR. Chat stays on-device. No cloud AI or API keys.',
+      'Categorizes entries and receipts after OCR. Chat stays on-device.',
     ),
   ).toBeVisible();
   await expect(page.getByRole('radio', { name: /AI mode/ })).toHaveCount(0);

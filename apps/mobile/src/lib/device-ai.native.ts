@@ -1,4 +1,4 @@
-import { Platform, TurboModuleRegistry } from 'react-native';
+import { AppState, Platform, TurboModuleRegistry } from 'react-native';
 import native from '../../modules/pocket-device-ai';
 import {
   validateClassification,
@@ -17,6 +17,7 @@ import {
   readCategory,
   receiptReviewMessages,
   receiptReviewSchema,
+  receiptReviewMatches,
   chatInstructions,
   type LocalMessage,
 } from '../local-ai-prompts';
@@ -84,6 +85,8 @@ export function suspendDeviceAi() {
 async function generate(messages: LocalMessage[], schema?: object): Promise<string> {
   return serial(async () => {
     if (idle) clearTimeout(idle);
+    if (AppState.currentState === 'background' || AppState.currentState === 'inactive')
+      throw new Error('Reopen the app to use local AI.');
     const system = await systemAvailability();
     if (Platform.OS === 'android' && system.available && native?.generate) {
       const output = await native.generate(
@@ -120,6 +123,8 @@ async function generate(messages: LocalMessage[], schema?: object): Promise<stri
       };
       const formatted = await context.getFormattedChat(messages, undefined, options);
       const tokens = await context.tokenize(formatted.prompt);
+      if (AppState.currentState === 'background' || AppState.currentState === 'inactive')
+        throw new Error('Reopen the app to use local AI.');
       if (tokens.tokens.length > 1700)
         throw new Error('Shorten the description or message to use local AI.');
       const output = await context.completion({
@@ -127,7 +132,7 @@ async function generate(messages: LocalMessage[], schema?: object): Promise<stri
         ...options,
         temperature: 0,
         seed: 42,
-        n_predict: schema ? 48 : 192,
+        n_predict: schema === receiptReviewSchema ? 128 : schema ? 48 : 192,
         stop: ['<|im_end|>', '<|endoftext|>'],
       });
       if (output.truncated || output.stopped_limit)
@@ -186,10 +191,8 @@ export async function classifyReceipt(
     );
     if (category.status !== 'classified') return { ...category, approved: false };
     // Financial validation in receipt-processor remains mandatory, independent of this AI review.
-    const review = JSON.parse(
-      await generate(receiptReviewMessages(document, draft), receiptReviewSchema),
-    );
-    return { ...category, approved: review.approved === true };
+    const review = await generate(receiptReviewMessages(document), receiptReviewSchema);
+    return { ...category, approved: receiptReviewMatches(review, draft) };
   } catch {
     return { status: 'unavailable', reason: 'Check the receipt details.', approved: false };
   }

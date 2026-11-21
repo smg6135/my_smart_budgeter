@@ -12,6 +12,8 @@ module.exports = ({ config }) => {
       ['@react-native-google-signin/google-signin', { iosUrlScheme }],
     ];
   if (process.env.EAS_BUILD_PROFILE === 'production') {
+    if (process.env.EXPO_PUBLIC_LOCAL_AI_SMOKE)
+      throw new Error('Remove the synthetic AI smoke test from production');
     if (process.env.EXPO_PUBLIC_AUTH_EMULATOR_URL)
       throw new Error('Remove the auth emulator from production');
   }

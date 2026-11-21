@@ -90,7 +90,7 @@ function amounts(text: string): number[] {
   });
 }
 
-function printedDate(rows: string[], now: string): string {
+export function printedReceiptDate(rows: string[], now: string = today()): string {
   const found = new Set<string>();
   const add = (year: number, month: number, day: number) => {
     const value = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -177,7 +177,7 @@ export function parseReceiptText(document: RecognizedReceipt, now = today()): Sc
       amount = 0;
     }
   }
-  const date = printedDate(rows, now);
+  const date = printedReceiptDate(rows, now);
   const merchant =
     rows
       .slice(0, 6)

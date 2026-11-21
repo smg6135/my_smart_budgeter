@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LocalModelStore, type ModelSpec, type ModelStorage } from '../src/local-model-store';
-import { categoryMessages, categorySchema, readCategory } from '../src/local-ai-prompts';
+import {
+  categoryMessages,
+  categorySchema,
+  readCategory,
+  receiptReviewMessages,
+  receiptReviewMatches,
+} from '../src/local-ai-prompts';
 import { localModel } from '../src/local-model';
 
 const model: ModelSpec = {
@@ -205,4 +211,43 @@ test('local outputs stay in the same category contract; invalid/unclear is manua
   assert.equal(messages.at(-1)?.content, 'dentist visit');
   assert.equal(messages[0].role, 'system');
   assert.equal(categorySchema.additionalProperties, false);
+});
+test('receipt review independently reads OCR, never sees the draft and cannot approve mismatched finances', () => {
+  const draft = {
+    merchant: 'Corner Cafe',
+    amount: 12.5,
+    currency: 'SGD',
+    date: '2026-11-19',
+    category: 'Other',
+    notes: '',
+  };
+  const fields = { merchant: 'Corner Cafe', total: '12.50', currency: 'SGD', date: '2026-11-19' };
+  assert.equal(receiptReviewMatches(JSON.stringify(fields), draft), true);
+  assert.equal(
+    receiptReviewMatches(JSON.stringify({ ...fields, date: '19 Nov 2026' }), draft),
+    true,
+  );
+  for (const change of [
+    { total: '15.00' },
+    { currency: 'USD' },
+    { date: '2026-11-18' },
+    { merchant: 'Other Shop' },
+    { total: '' },
+    { currency: '' },
+    { date: '' },
+  ])
+    assert.equal(receiptReviewMatches(JSON.stringify({ ...fields, ...change }), draft), false);
+  assert.equal(receiptReviewMatches('{"approved":true}', draft), false);
+  assert.equal(receiptReviewMatches(JSON.stringify(fields), { ...draft, amount: 99 }), false);
+  assert.equal(receiptReviewMatches('null', draft), false);
+  const messages = receiptReviewMessages({
+    engine: 'apple-vision',
+    width: 100,
+    height: 100,
+    lines: [
+      { text: 'TOTAL SGD 12.50', confidence: 0.99, bounds: { x: 0, y: 0, width: 1, height: 1 } },
+    ],
+  });
+  assert.equal(messages[1].content, 'TOTAL SGD 12.50');
+  assert(!JSON.stringify(messages).includes('draft'));
 });

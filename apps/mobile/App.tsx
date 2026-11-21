@@ -161,6 +161,11 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
   );
   const receipts = useReceipts(s, setNotice, (jobs) => addReceiptJobs(jobs, true));
   const deviceAi = useDeviceAi();
+  useEffect(() => {
+    if (process.env.EXPO_PUBLIC_LOCAL_AI_SMOKE === '1') {
+      void import('./src/lib/device-ai-smoke').then(({ runDeviceAiSmoke }) => runDeviceAiSmoke());
+    }
+  }, []);
   const entryClassification = useEntryClassification(
     form?.title,
     !!form &&

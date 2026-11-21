@@ -44,6 +44,20 @@ with Path("/tmp/pocket-ios-runtime.log").open("w") as log:
                 break
         else:
             raise RuntimeError("Release app did not reach the local budget overview. Inspect the screenshot/runtime log.")
+        if '--local-ai' in sys.argv:
+            container = Path(subprocess.check_output(
+                ['xcrun', 'simctl', 'get_app_container', simulator, bundle_id, 'data'], text=True).strip())
+            marker = container / 'Documents/pocket-local-ai-smoke.json'
+            for _ in range(100):
+                if marker.exists():
+                    result = json.loads(marker.read_text())
+                    print('Local model inference:', result)
+                    if result.get('status') != 'passed':
+                        raise RuntimeError('Local model download/inference failed.')
+                    break
+                time.sleep(3)
+            else:
+                raise RuntimeError('Local model download/inference did not complete in five minutes.')
     finally:
         stream.terminate()
         stream.wait(timeout=10)

@@ -18,7 +18,7 @@ concurrency:
 jobs:
   ios:
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     defaults:
       run:
         working-directory: apps/mobile
@@ -30,6 +30,7 @@ jobs:
       EXPO_PUBLIC_API_URL: https://backend.normiesai.com
       EXPO_PUBLIC_API_US_URL: https://backend.normiesai.com
       EXPO_PUBLIC_API_SG_URL: https://sg.backend.normiesai.com
+      EXPO_PUBLIC_LOCAL_AI_SMOKE: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,7 +53,7 @@ jobs:
           xcodebuild -version
           xcodebuild -workspace ios/PocketBudget.xcworkspace -scheme PocketBudget -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/pocket-ios-build CODE_SIGNING_ALLOWED=NO build > /tmp/pocket-ios-build.log 2>&1 || { tail -120 /tmp/pocket-ios-build.log; exit 1; }
       - name: Launch the release app and verify account-free budgeting
-        run: python3 ../../scripts/smoke-ios-launch.py /tmp/pocket-ios-build/Build/Products/Release-iphonesimulator/PocketBudget.app
+        run: python3 ../../scripts/smoke-ios-launch.py /tmp/pocket-ios-build/Build/Products/Release-iphonesimulator/PocketBudget.app --local-ai
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
