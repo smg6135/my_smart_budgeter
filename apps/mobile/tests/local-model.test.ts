@@ -26,6 +26,14 @@ test('local responses use parsed answer content, keep reasoning out, and disable
   };
   assert.equal(readCategory(localCompletionText(output)).status, 'classified');
   assert.equal(localCompletionText(output), output.content);
+  assert.equal(
+    localCompletionText({ text: '<|im_start|>assistant\n{"category":"transport"}' }),
+    output.content,
+  );
+  assert.equal(
+    localCompletionText({ text: '<|im_start|>assistant\n{"category":"transport"}<|im_end|>' }),
+    output.content,
+  );
   assert.throws(() => localCompletionText({ ...output, truncated: true }));
   assert.throws(() => localCompletionText({ ...output, interrupted: true }));
   assert.throws(() => localCompletionText({ text: 'reasoning only', content: '' }));
