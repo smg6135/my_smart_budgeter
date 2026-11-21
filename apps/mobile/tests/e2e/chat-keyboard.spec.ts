@@ -1,6 +1,39 @@
 import { expect, test } from './fixtures';
+import type { Page } from '@playwright/test';
 import { demoState } from '../../src/finance';
 import { textProblems } from './layout-helpers';
+
+// React Native's onLayout/content-size callbacks follow browser resize/font events.
+// Compare positions only once several consecutive frames agree, rather than a stale frame.
+async function settleChatLayout(page: Page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    let previous = '',
+      stable = 0;
+    for (let frame = 0; frame < 120; frame++) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const elements = ['chat-composer', 'bottom-navigation'].map((id) =>
+        document.querySelector(`[data-testid="${id}"]`),
+      );
+      if (elements.some((element) => !element)) {
+        stable = 0;
+        continue;
+      }
+      const current = elements
+        .map((element) => {
+          const box = element!.getBoundingClientRect();
+          return [box.x, box.y, box.width, box.height]
+            .map((value) => Math.round(value * 10))
+            .join(',');
+        })
+        .join('|');
+      stable = current === previous ? stable + 1 : 0;
+      previous = current;
+      if (stable >= 4) return;
+    }
+    throw new Error('Chat layout did not settle after resizing.');
+  });
+}
 
 test('chat composer stays visible while the viewport shrinks and history scrolls', async ({
   page,
@@ -18,10 +51,15 @@ test('chat composer stays visible while the viewport shrinks and history scrolls
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/planner');
   const input = page.getByLabel('Message your planner');
+  await expect(input).toBeVisible();
+  await settleChatLayout(page);
+  await input.focus();
+  await expect(input).toBeFocused();
   const draft = Array.from({ length: 10 }, (_, i) => `Draft line ${i + 1}`).join('\n');
   await input.fill(draft);
   for (const height of [844, 480, 360, 844]) {
     await page.setViewportSize({ width: 390, height });
+    await settleChatLayout(page);
     await expect(input).toHaveValue(draft);
     const composer = page.getByTestId('chat-composer');
     const footer = page.getByTestId('bottom-navigation');
@@ -67,11 +105,18 @@ test('a long AI proposal cannot push the composer below the visible screen', asy
   );
   await page.goto('/planner');
   const input = page.getByLabel('Message your planner');
+  await expect(input).toBeVisible();
+  await settleChatLayout(page);
+  await input.focus();
+  await expect(input).toBeFocused();
   await input.fill('Plan a trip');
+  await expect(input).toHaveValue('Plan a trip');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(input).toHaveValue('');
   await page.getByRole('button', { name: 'Review & add savings goal' }).scrollIntoViewIfNeeded();
   await input.fill('I can still write a follow-up.');
+  await expect(input).toHaveValue('I can still write a follow-up.');
+  await settleChatLayout(page);
   const [composer, footer] = await Promise.all([
     page.getByTestId('chat-composer').boundingBox(),
     page.getByTestId('bottom-navigation').boundingBox(),
