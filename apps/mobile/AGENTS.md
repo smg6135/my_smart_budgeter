@@ -1,5 +1,7 @@
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
+Read [the session handoff](../../docs/HANDOFF.md) for current behavior, release evidence, limitations and remaining work before changing the app.
+
 ## Native build quota
 
 Conserve native-build quota. Prefer local lint/typecheck/unit/browser checks and reuse matching compiled simulator artifacts for JavaScript-only native tests. Native CI workflows are manual; do not trigger cloud builds speculatively or automatically rebuild for every small fix.

@@ -2,6 +2,8 @@
 
 A free, MIT-licensed budget controller. Budgets stay on your device. No account, paid AI API, or hosted backend is required.
 
+**New session:** read the [handoff and remaining work](docs/HANDOFF.md) first.
+
 ## Run locally
 
 Use Node 24:
