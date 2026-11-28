@@ -1,6 +1,6 @@
 module.exports = ({ config }) => {
   if (process.env.POCKET_IOS_PROVISIONING_PROFILE) {
-    if (!/^[A-Z0-9-]{36}$/.test(process.env.POCKET_IOS_PROVISIONING_PROFILE) ||
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(process.env.POCKET_IOS_PROVISIONING_PROFILE) ||
         !/^[A-Z0-9]{10}$/.test(process.env.POCKET_APPLE_TEAM || ''))
       throw new Error('Invalid direct iOS signing configuration');
     config.plugins = [...(config.plugins || []), ['./plugins/with-ios-release-signing', {
