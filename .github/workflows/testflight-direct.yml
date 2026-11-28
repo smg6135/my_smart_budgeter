@@ -1,0 +1,80 @@
+name: Release TestFlight directly
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Unused Apple build number'
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: testflight-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-latest
+    environment: testflight
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      EAS_BUILD_PROFILE: production
+      POCKET_IOS_BUILD_NUMBER: ${{ inputs.build_number }}
+      POCKET_APPLE_TEAM: 8X93YF2GHJ
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - name: Prepare and verify source
+        run: |
+          npm ci
+          npm run typecheck
+          npm run lint
+          npm test
+          npm run prepare:local-ai
+          npm run test:ios-ocr
+          npm run test:model-integrity
+      - name: Install existing Apple signing assets
+        env:
+          P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: bash ../../scripts/ios/ci-signing.sh
+      - name: Generate and archive device release
+        run: |
+          npx expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+          cd ..
+          xcodebuild -version
+          xcodebuild -workspace ios/PocketBudget.xcworkspace -scheme PocketBudget -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/PocketBudget.xcarchive" -derivedDataPath "$RUNNER_TEMP/pocket-derived" archive > "$RUNNER_TEMP/pocket-archive.log" 2>&1 || { tail -100 "$RUNNER_TEMP/pocket-archive.log"; exit 1; }
+      - name: Export signed IPA
+        run: |
+          python3 ../../scripts/ios/ci-export-options.py "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/PocketBudget.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/pocket-ipa" > "$RUNNER_TEMP/pocket-export.log" 2>&1 || { tail -100 "$RUNNER_TEMP/pocket-export.log"; exit 1; }
+          python3 ../../scripts/ios/verify-release.py "$RUNNER_TEMP/pocket-ipa"
+      - name: Upload directly to Apple
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 600 "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          ipa_file=$(find "$RUNNER_TEMP/pocket-ipa" -maxdepth 1 -name '*.ipa' -print -quit)
+          test -n "$ipa_file"
+          xcrun altool --upload-app --type ios --file "$ipa_file" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+      - name: Remove signing assets
+        if: always()
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          if [ -n "${POCKET_KEYCHAIN_PATH:-}" ]; then security delete-keychain "$POCKET_KEYCHAIN_PATH" || true; fi
+          rm -f "$RUNNER_TEMP/pocket-cert.p12" "$RUNNER_TEMP/pocket-profile.mobileprovision" "$RUNNER_TEMP/pocket-profile.plist"
+          if [ -n "$ASC_KEY_ID" ]; then rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"; fi
