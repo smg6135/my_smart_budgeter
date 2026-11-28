@@ -58,6 +58,17 @@ export function readCategory(text: string): Classification {
   }
   return { status: 'needs-input', reason: 'Choose a category.' };
 }
+// Remove only financial/layout noise, never map words to expense categories.
+// Reserve the small model's input budget for merchant and purchased items.
+export function receiptCategoryText(document: RecognizedReceipt): string {
+  const lines = document.lines.map((line) => line.text.trim()).filter(Boolean);
+  const financial =
+    /^(?:(?:sub[ -]?total|grand total|total|tax|gst|vat|change|cash|tender(?:ed)?|amount paid|balance due)\s*[:=]?\s*(?:[A-Z]{3}\s*)?[$\u20ac\u00a3\u00a5\u20a9]?\s*[\d,.]+(?:\s*[A-Z]{3})?|[\d\s.,:/#%+()=-]+)$/i;
+  return lines
+    .filter((line, index) => index === 0 || !financial.test(line))
+    .join('\n')
+    .slice(0, 1600);
+}
 export function receiptCategoryMessages(document: RecognizedReceipt): LocalMessage[] {
   // Receipt examples keep tender/totals from dominating this small model's category decision.
   const examples = [
@@ -82,10 +93,7 @@ export function receiptCategoryMessages(document: RecognizedReceipt): LocalMessa
     ]),
     {
       role: 'user',
-      content: document.lines
-        .map((line) => line.text)
-        .join('\n')
-        .slice(0, 1600),
+      content: receiptCategoryText(document),
     },
   ];
 }

@@ -1,3 +1,5 @@
+> Historical record. The 2026-11-22 local-only implementation and cloud retirement supersede backend, authentication and deployment requirements below. Read [the current handoff](docs/HANDOFF.md) for current behavior.
+
 This is going to be a mobile app that's simple yet smart budget tracker for everyone to use. Core functionalities are
 
 1. Budget tracking

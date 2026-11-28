@@ -10,9 +10,9 @@ enum ReceiptOcrError: LocalizedError {
     case .localFileRequired: return "Choose a receipt from this device."
     case .oversized: return "File exceeds 8 MB."
     case .tooManyPixels: return "Photo exceeds 50 megapixels. Use a smaller photo."
-    case .unreadable: return "Cannot read this image on-device. Try cloud OCR."
-    case .noText: return "No readable text. Retake the photo or try cloud OCR."
-    case .tooMuchText: return "Too much text in this image. Try cloud OCR."
+    case .unreadable: return "Cannot read this image on-device. Try a smaller photo."
+    case .noText: return "No readable text. Retake the photo or choose another photo."
+    case .tooMuchText: return "Too much text in this image. Try a smaller photo."
     }
   }
 }
@@ -70,6 +70,8 @@ enum ReceiptTextRecognizer {
       throw ReceiptOcrError.unreadable
     }
     let request = VNRecognizeTextRequest()
+    // A screen lock can arrive during perform(). Avoid background Metal/GPU work.
+    request.usesCPUOnly = true
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = true
     let supported = try request.supportedRecognitionLanguages()

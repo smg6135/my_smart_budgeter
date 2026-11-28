@@ -13,9 +13,9 @@ import { useEffect, useRef, type ComponentRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, C, Card, Field, Icon, Label, styles as u } from './ui';
 import { money, State } from '../finance';
-import { receiptDraft, receiptEntry } from '../receipts';
+import { receiptDraft, receiptEntry, receiptPurchaseMatches } from '../receipts';
 import { parseAmount, supportedCurrency } from '../currency';
-import { receiptCategories } from '../receipt-audit';
+import { activeCategories } from '../classification';
 import { CurrencyPicker } from './currency-picker';
 import { Select } from './select';
 import type { useReceipts } from '../hooks/use-receipts';
@@ -26,12 +26,14 @@ export function ReceiptScanner({
   saveAll,
   undo,
   aiStatus,
+  linkExisting,
 }: {
   batch: Batch;
   state: State;
   saveAll: () => void;
   undo?: () => void;
   aiStatus?: string;
+  linkExisting?: (jobId: string, entryId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
   const editorScroll = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -89,7 +91,9 @@ export function ReceiptScanner({
       <Card>
         <Text style={u.h2}>Receipts</Text>
         <Text style={u.body}>
-          On-device scanning is available in the iOS app. Add entries manually here.
+          {batch.deviceOcr
+            ? 'Update the app to scan receipts.'
+            : 'Scan receipts in the mobile app.'}
         </Text>
       </Card>
     );
@@ -120,7 +124,6 @@ export function ReceiptScanner({
           </View>
         )}
       </View>
-      <Text style={u.body}>On-device OCR → AI classification · Up to 20 photos</Text>
       {!!aiStatus && <Text style={u.body}>{aiStatus}</Text>}
       {batch.processing && (
         <View style={u.row}>
@@ -133,7 +136,7 @@ export function ReceiptScanner({
       {!!added.length && (
         <View style={u.between}>
           <Text style={u.h2}>
-            Added {added.length} expense{added.length === 1 ? '' : 's'}
+            Saved {added.length} receipt{added.length === 1 ? '' : 's'}
           </Text>
           {undo && (
             <Button small secondary onPress={undo}>
@@ -263,6 +266,17 @@ export function ReceiptScanner({
                         {error}
                       </Text>
                     )}
+                    {job.status === 'ready' &&
+                      receiptPurchaseMatches(job, state).map((match) => (
+                        <View key={match.id} style={{ gap: 8 }}>
+                          <Text style={u.body}>Possible match: {match.title}</Text>
+                          {!!linkExisting && (
+                            <Button secondary onPress={() => linkExisting(job.id, match.id)}>
+                              Link receipt to {match.title}
+                            </Button>
+                          )}
+                        </View>
+                      ))}
                     {job.status === 'error' ? (
                       <View style={u.row}>
                         <Button
@@ -287,6 +301,19 @@ export function ReceiptScanner({
                       </View>
                     ) : (
                       <>
+                        <Field
+                          label="Receipt title"
+                          accessibilityLabel={`${job.name} title`}
+                          value={draft.title || ''}
+                          onChangeText={(title) => batch.patchDraft(job.id, { title })}
+                        />
+                        <Field
+                          label="Quick detail"
+                          accessibilityLabel={`${job.name} detail`}
+                          value={draft.detail || ''}
+                          onChangeText={(detail) => batch.patchDraft(job.id, { detail })}
+                          multiline
+                        />
                         <View
                           onLayout={(event) => {
                             positions.current[job.id + ':merchant'] = event.nativeEvent.layout.y;
@@ -351,7 +378,10 @@ export function ReceiptScanner({
                         <Select
                           label="Category"
                           value={draft.category}
-                          options={receiptCategories.map((value) => ({ value, label: value }))}
+                          options={activeCategories(state).map((value) => ({
+                            value,
+                            label: value,
+                          }))}
                           onChange={(category) => batch.patchDraft(job.id, { category })}
                         />
                         {!!draft.currency && draft.currency !== state.currency && (
@@ -387,7 +417,9 @@ export function ReceiptScanner({
                   saveAll();
                 }}
               >
-                Add expenses ({valid})
+                {unresolved.some((job) => receiptPurchaseMatches(job, state).length)
+                  ? `Confirm separate expenses (${valid})`
+                  : `Add expenses (${valid})`}
               </Button>
             </View>
           </View>

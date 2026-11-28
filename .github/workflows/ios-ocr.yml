@@ -20,13 +20,6 @@ jobs:
       run:
         working-directory: apps/mobile
     env:
-      EXPO_PUBLIC_FIREBASE_PROJECT_ID: demo-pocket
-      EXPO_PUBLIC_FIREBASE_API_KEY: fake-emulator-api-key
-      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-pocket.firebaseapp.com
-      EXPO_PUBLIC_AUTH_EMULATOR_URL: ''
-      EXPO_PUBLIC_API_URL: https://backend.normiesai.com
-      EXPO_PUBLIC_API_US_URL: https://backend.normiesai.com
-      EXPO_PUBLIC_API_SG_URL: https://sg.backend.normiesai.com
       EXPO_PUBLIC_LOCAL_AI_SMOKE: '1'
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +49,7 @@ jobs:
           xcodebuild -workspace ios/PocketBudget.xcworkspace -scheme PocketBudget -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/pocket-ios-build ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build > /tmp/pocket-ios-build.log 2>&1 || { tail -120 /tmp/pocket-ios-build.log; exit 1; }
       - name: Download matching simulator runtime
         if: ${{ inputs.simulator_url }}
-        run: python3 ../../scripts/download-ios-simulator.py
+        run: python3 ../../scripts/ios/download-ios-simulator.py
         env:
           POCKET_SIMULATOR_URL: ${{ inputs.simulator_url }}
       - name: Repack current JavaScript into the matching native runtime
@@ -65,7 +58,7 @@ jobs:
           mkdir -p /tmp/pocket-ios-build/Build/Products/Release-iphonesimulator
           npx --yes @expo/repack-app --platform ios --source-app /tmp/pocket-native/PocketBudget.app --output /tmp/pocket-ios-build/Build/Products/Release-iphonesimulator/PocketBudget.app --js-bundle-only --embed-bundle-assets
       - name: Launch the release app and verify account-free budgeting
-        run: python3 ../../scripts/smoke-ios-launch.py /tmp/pocket-ios-build/Build/Products/Release-iphonesimulator/PocketBudget.app --local-ai
+        run: python3 ../../scripts/ios/smoke-ios-launch.py /tmp/pocket-ios-build/Build/Products/Release-iphonesimulator/PocketBudget.app --local-ai
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

@@ -20,7 +20,7 @@ public final class PocketReceiptOcrModule: Module {
         } catch let error as ReceiptOcrError {
           promise.reject("ERR_RECEIPT_OCR", error.localizedDescription)
         } catch {
-          promise.reject("ERR_RECEIPT_OCR", "Cannot read this image on-device. Try cloud OCR.")
+          promise.reject("ERR_RECEIPT_OCR", "Cannot read this image on-device. Try another photo.")
         }
       }
     }.runOnQueue(queue)

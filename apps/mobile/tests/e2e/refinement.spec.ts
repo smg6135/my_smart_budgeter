@@ -55,7 +55,7 @@ test('calendar navigates past months and shows preserved summary and selected-da
     },
   ];
   await page.addInitScript(
-    (state) => localStorage.setItem('pocket-budget.v2.test-user', JSON.stringify(state)),
+    (state) => localStorage.setItem('pocket-budget.local.v1', JSON.stringify(state)),
     sample,
   );
   await page.goto('/');
@@ -101,6 +101,11 @@ test('phone statistics and entry controls remain horizontal; bottom bar fills th
   await setBudget(page);
   await page.goto('/');
   const cards = page.getByTestId('overview-statistics').getByTestId('budget-card');
+  await expect(cards).toHaveCount(3);
+  await expect(cards.first()).toBeVisible();
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
   const boxes = await Promise.all((await cards.all()).map((card) => card.boundingBox()));
   expect(new Set(boxes.map((box) => Math.round(box!.y))).size).toBe(1);
   await expect(page.getByRole('button', { name: 'Change display currency' })).toHaveCount(0);

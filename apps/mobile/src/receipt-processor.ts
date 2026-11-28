@@ -3,6 +3,8 @@ import { parseReceiptText, type RecognizedReceipt } from './receipt-text';
 import type { ReceiptFile } from './receipts';
 import { RECEIPT_MAX_BYTES, RECEIPT_MIME_TYPES } from './receipts';
 import { applyReceiptAudit, clearDeviceReceipt, type ReceiptAudit } from './receipt-audit';
+import { extractedReceiptDraft } from './receipt-extraction';
+import { receiptReviewMatches } from './local-ai-prompts';
 export type ReceiptProcessing = {
   result: ScanResult;
   engine: 'device';
@@ -23,16 +25,20 @@ export async function processReceipt(
     throw new Error('Choose a receipt photo. PDF scanning is not available on-device.');
   const document = await operations.recognize(file.uri);
   const draft = parseReceiptText(document);
-  const audit = await operations
+  const audit: ReceiptAudit = await operations
     .classify(document, draft)
     .catch(() => ({ status: 'unavailable' as const, reason: 'Choose a category manually.' }));
   return {
-    result: applyReceiptAudit(draft, audit),
+    result: applyReceiptAudit(
+      audit.extraction ? extractedReceiptDraft(draft, audit.extraction) : draft,
+      audit,
+    ),
     recognizedText: document.lines.map((line) => line.text).join('\n'),
     engine: 'device',
     audit,
     needsReview:
       !clearDeviceReceipt(document, draft) ||
+      (!!audit.extraction && !receiptReviewMatches(JSON.stringify(audit.extraction), draft)) ||
       audit.status !== 'classified' ||
       audit.approved !== true,
   };

@@ -1,0 +1,8 @@
+{
+  "name": "pocket-transaction-capture",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "description": "Opt-in local financial notification capture",
+  "license": "MIT"
+}

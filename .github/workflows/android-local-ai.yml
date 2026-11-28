@@ -1,4 +1,4 @@
-name: Validate Android local AI
+name: Validate Android OCR and local AI
 on:
   workflow_dispatch:
 permissions:
@@ -30,8 +30,8 @@ jobs:
       - run: npm ci
       - run: npm run prepare:local-ai
       - run: npx expo prebuild --platform android --no-install
-      - name: Compile Gemini Nano bridge and bundled local inference runtime
-        run: ./gradlew :app:assembleDebug --no-daemon --max-workers=2
+      - name: Test OCR and capture policies; compile native app
+        run: ./gradlew :pocket-receipt-ocr:testDebugUnitTest :pocket-transaction-capture:testDebugUnitTest :app:assembleDebug --no-daemon --max-workers=2
         working-directory: apps/mobile/android
       - uses: actions/upload-artifact@v4
         if: success()

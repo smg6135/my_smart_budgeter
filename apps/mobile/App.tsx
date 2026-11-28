@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { CategorySettings } from './src/components/category-settings';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -63,10 +64,25 @@ import { ChatResult } from './src/api';
 import { chatOnDevice, downloadDeviceAi, pauseDeviceAi } from './src/lib/device-ai';
 import { useDeviceAi } from './src/hooks/use-device-ai';
 import { useEntryClassification } from './src/hooks/use-entry-classification';
-import { expenseCategories, applyCategorySuggestion } from './src/classification';
+import { activeCategories, applyCategorySuggestion } from './src/classification';
 import { useReceipts } from './src/hooks/use-receipts';
+import { useTransactionCapture } from './src/hooks/use-transaction-capture';
+import { PurchaseCapture } from './src/components/purchase-capture';
+import { CaptureContext } from './src/capture-context';
+import {
+  receiveCaptures,
+  receiveSingleCapture,
+  type CaptureEvent,
+} from './src/transaction-capture';
+import { acknowledgeCaptures, clearNativeCaptures } from './src/lib/transaction-capture';
 import { ReceiptScanner } from './src/components/receipt-scanner';
-import { prepareReceiptImport, undoReceiptImport, ReceiptJob } from './src/receipts';
+import {
+  prepareReceiptImport,
+  undoReceiptImport,
+  ReceiptJob,
+  receiptFingerprints,
+  linkReceiptPurchase,
+} from './src/receipts';
 import {
   Button,
   C,
@@ -81,9 +97,7 @@ import {
   styles as u,
 } from './src/components/ui';
 
-import { useAuth } from './src/hooks/use-auth';
-import { AuthScreen } from './src/components/auth-screen';
-import { Session, signOut, authConfigured } from './src/lib/auth';
+import { savedBudgets, selectBudget, SavedBudget } from './src/local-budgets';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { PageContext, routes, Tab } from './src/page-context';
 type Form = {
@@ -114,15 +128,23 @@ const tabs: { name: Tab; icon: IconName }[] = [
   { name: 'Tools', icon: 'scan-outline' },
   { name: 'Settings', icon: 'settings-outline' },
 ];
-const categories = [...expenseCategories];
+
 const errorText = (e: unknown) =>
   e instanceof Error ? e.message : 'Something went wrong. Please retry.';
-function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => void }) {
+function AppContent({
+  budget,
+  budgets,
+  onSelect,
+}: {
+  budget: SavedBudget;
+  budgets: SavedBudget[];
+  onSelect: (budget: SavedBudget) => Promise<void>;
+}) {
   const { width, fontScale } = useWindowDimensions(),
     wide = width >= 1100 && fontScale < 1.4,
     columns = width >= 900 && fontScale < 1.25,
     compact = width < 420 || fontScale > 1.15;
-  const localBudget = !!onSignIn;
+  const localBudget = budget.local;
   const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardVisible();
   const pathname = usePathname(),
@@ -161,6 +183,19 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
   );
   const receipts = useReceipts(s, setNotice, (jobs) => addReceiptJobs(jobs, true));
   const deviceAi = useDeviceAi();
+  const categories = activeCategories(s || {});
+  const purchaseCapture = useTransactionCapture(
+    budget.key,
+    s ? s.captureSettings?.packages || [] : undefined,
+    update,
+  );
+  const captureState = useRef(s);
+  captureState.current = s;
+  const receivePurchase = useCallback((event: CaptureEvent) => {
+    if (!captureState.current) throw new Error('Wait for the saved budget to load.');
+    receiveSingleCapture(captureState.current, event);
+    setS((old) => (old ? receiveCaptures(old, [event]) : old));
+  }, []);
   useEffect(() => {
     if (process.env.EXPO_PUBLIC_LOCAL_AI_SMOKE === '1') {
       void import('./src/lib/device-ai-smoke').then(({ runDeviceAiSmoke }) => runDeviceAiSmoke());
@@ -174,23 +209,31 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
       !form.categoryEdited &&
       deviceAi.available,
     (category, title) => setForm((old) => applyCategorySuggestion(old, title, category)),
+    categories,
   );
   const queue = useRef(Promise.resolve()),
     chatScroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
   useEffect(() => {
-    load(session.uid, localBudget)
+    load(budget.uid, localBudget)
       .then((data) => {
         setS(data);
       })
       .catch((e) => setFatal(errorText(e)));
-    void removeLegacyProviderKey();
-  }, [session.uid, localBudget]);
+    void removeLegacyProviderKey().catch(() => {});
+  }, [budget.uid, localBudget]);
   useEffect(() => {
     if (!s) return;
     const snapshot = s;
     queue.current = queue.current
       .catch(() => {})
-      .then(() => persist(snapshot, session.uid, localBudget))
+      .then(() => persist(snapshot, budget.uid, localBudget))
+      .then(async () => {
+        try {
+          await acknowledgeCaptures(budget.key, snapshot);
+        } catch {
+          setNotice('Budget saved. Purchase alerts will retry when the app is reopened.');
+        }
+      })
       .then(() => setStorageError(''))
       .catch((e) =>
         setStorageError(
@@ -198,7 +241,7 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
             errorText(e),
         ),
       );
-  }, [s, session.uid, localBudget]);
+  }, [s, budget.uid, budget.key, localBudget]);
   const fx = useExchangeRates(s?.currency, (quote) => update((old) => ({ ...old, fx: quote })));
   useEffect(() => {
     if (!notice) return;
@@ -217,7 +260,7 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
       amount: '',
       date: type === 'goal' ? addMonths(3) : today(),
       kind: 'expense',
-      category: 'Other',
+      category: categories.includes('Other') ? 'Other' : categories[0],
       categoryEdited: !!preset.existing || !!preset.category,
       goalId: s?.goals[0]?.id || '',
       recurring: true,
@@ -239,10 +282,18 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
       <SafeAreaView style={st.loading}>
         <Text style={u.h2}>Your local data is preserved</Text>
         <Text style={u.body}>{fatal}</Text>
-        <Text style={u.body}>Close and reopen the app. No data has been overwritten.</Text>
-        <Button secondary onPress={() => void signOut().catch((e) => setFatal(errorText(e)))}>
-          Sign out
-        </Button>
+        <Text style={u.body}>Reopen the app to retry.</Text>
+        {budgets
+          .filter((item) => item.key !== budget.key)
+          .map((item) => (
+            <Button
+              key={item.key}
+              secondary
+              onPress={() => void onSelect(item).catch((e) => setFatal(errorText(e)))}
+            >
+              {item.label}
+            </Button>
+          ))}
       </SafeAreaView>
     );
   if (!s)
@@ -304,6 +355,12 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
         let booked = amount,
           original: Entry['original'];
         const existing = state.entries.find((e) => e.id === f.existing);
+        if (
+          f.kind === 'expense' &&
+          !categories.includes(f.category) &&
+          existing?.category !== f.category
+        )
+          throw new Error('Choose an active expense category.');
         if (f.currency !== state.currency) {
           if (!supportedCurrency(f.currency))
             throw new Error('Choose a supported expense currency.');
@@ -342,6 +399,12 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
             (f.kind === 'expense' ? f.category : f.kind === 'income' ? 'Income' : 'Savings'),
           amount: booked,
           ...(original ? { original } : {}),
+          ...(existing?.detail ? { detail: existing.detail } : {}),
+          ...(existing?.receiptMerchant ? { receiptMerchant: existing.receiptMerchant } : {}),
+          ...(existing?.capture ? { capture: existing.capture } : {}),
+          ...(existing?.receiptFingerprints
+            ? { receiptFingerprints: existing.receiptFingerprints }
+            : {}),
           ...(existing?.receiptFingerprint
             ? { receiptFingerprint: existing.receiptFingerprint }
             : {}),
@@ -499,7 +562,7 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
               (existing) =>
                 existing.id === entry.id ||
                 (!!entry.receiptFingerprint &&
-                  existing.receiptFingerprint === entry.receiptFingerprint),
+                  receiptFingerprints(existing).includes(entry.receiptFingerprint)),
             ),
         ),
         ...old.entries,
@@ -513,6 +576,19 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
     setNotice(
       `Added ${prepared.entries.length} expense${prepared.entries.length === 1 ? '' : 's'}.`,
     );
+  }
+  function linkReceipt(jobId: string, entryId: string) {
+    const job = receipts.jobs.find((item) => item.id === jobId);
+    if (!job || !s) return;
+    try {
+      linkReceiptPurchase(s, job, entryId);
+      update((old) => linkReceiptPurchase(old, job, entryId));
+      receipts.patch(jobId, { linkedEntryId: entryId });
+      receipts.markSaved([jobId]);
+      setNotice('Receipt linked. Existing purchase amount and category kept.');
+    } catch (error) {
+      setNotice(errorText(error));
+    }
   }
   function saveReceipts() {
     addReceiptJobs(receipts.jobs);
@@ -611,6 +687,7 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
         </View>
         <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
           <Text style={st.entryTitle}>{e.title}</Text>
+          {!!e.detail && <Text style={st.entryMeta}>{e.detail}</Text>}
           <Text style={st.entryMeta}>
             {e.billId ? 'Reserved bill' : e.category} · {e.date.slice(5)}
             {e.original
@@ -923,9 +1000,16 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
                 label="Category filter"
                 value={draftFilters.category}
                 onChange={(category) => setDraftFilters({ ...draftFilters, category })}
-                options={['All', ...categories, 'Savings', 'Extra income', 'Bills'].map(
-                  (value) => ({ value, label: value }),
-                )}
+                options={[
+                  ...new Set([
+                    'All',
+                    ...categories,
+                    ...state.entries.map((e) => e.category),
+                    'Savings',
+                    'Extra income',
+                    'Bills',
+                  ]),
+                ].map((value) => ({ value, label: value }))}
               />
             </View>
           </View>
@@ -1091,7 +1175,6 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
             <Text style={u.caption}>INCOME</Text>
             <Text style={u.h2}>Monthly take-home income</Text>
             <Text style={u.amount}>{fmt(state.income)}</Text>
-            <Text style={u.body}>Extra income is added from Activity.</Text>
             <View style={u.divider} />
             <View style={u.between}>
               <Text style={u.body}>Income including extras</Text>
@@ -1127,7 +1210,6 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
               <Text style={u.amount}>{fmt(m.spendingBudget)}</Text>
               <Text style={u.amount}>{fmt(m.savingsBudget)}</Text>
             </View>
-            <Text style={u.body}>Extra savings reduce remaining spending.</Text>
           </Card>
         </View>
         <View style={[u.between, { marginTop: 30, marginBottom: 16 }]}>
@@ -1216,15 +1298,11 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
           ) : (
             <Empty
               title="No planned outgoings"
-              body="Add bills or one-time payments."
               action="Add an outgoing"
               onPress={() => open('bill')}
             />
           )}
         </Card>
-        <Text style={[u.body, { marginTop: 16 }]}>
-          Mark reserved bills paid here to avoid double-counting.
-        </Text>
         {goals()}
       </>
     );
@@ -1256,7 +1334,7 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
               Required: {fmt(t.required)}/month. Available: {fmt(t.available)}.{' '}
               {t.feasible
                 ? `Required savings: ${t.percent}%.`
-                : 'Targets exceed income. Reduce targets or extend deadlines.'}
+                : 'Reduce targets or extend deadlines.'}
             </Text>
             {t.feasible && t.percent > state.savePercent && (
               <Button
@@ -1278,7 +1356,6 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
             <Card>
               <Empty
                 title="No savings goals"
-                body="Set a target and deadline."
                 action="Create your first goal"
                 onPress={() => open('goal')}
               />
@@ -1506,13 +1583,21 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
       <>
         {heading('Tools')}
         <View style={[st.grid, { flexDirection: columns ? 'row' : 'column' }]}>
-          <View style={{ flex: columns ? 1 : undefined, minWidth: 0 }}>
+          <View style={{ flex: columns ? 1 : undefined, minWidth: 0, gap: 20 }}>
             <ReceiptScanner
               batch={receipts}
               state={state}
               saveAll={saveReceipts}
+              linkExisting={linkReceipt}
               undo={receiptUndo ? undoReceipts : undefined}
               aiStatus={!deviceAi.available ? deviceAi.reason : undefined}
+            />
+            <PurchaseCapture
+              state={s!}
+              status={purchaseCapture}
+              update={update}
+              notify={setNotice}
+              aiAvailable={deviceAi.available}
             />
           </View>
           <Card style={{ flex: columns ? 1 : undefined, backgroundColor: C.mint }}>
@@ -1522,7 +1607,6 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
             <Text style={u.h2}>Daily allowance</Text>
             <Text style={[u.amount, { fontSize: 36, lineHeight: 48 }]}>{fmt(m.daily)}</Text>
             <Text style={u.body}>/ day · {m.days} days left</Text>
-            <Text style={u.body}>Remaining spending ÷ days left.</Text>
             <View style={u.divider} />
             <Text style={u.h2}>Recurring bills</Text>
             <Text style={u.body}>
@@ -1544,10 +1628,10 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
     return (
       <>
         {heading('Settings')}
+        <CategorySettings state={state} update={update} />
         <View style={{ gap: 20 }}>
           <Card>
             <Text style={u.h2}>Currencies</Text>
-            <Text style={u.body}>Choose the currencies used for entries and reports.</Text>
             {currencies.map((currency) => (
               <View key={currency} style={[u.between, { flexWrap: 'nowrap', minHeight: 48 }]}>
                 <Text style={st.bold}>
@@ -1617,7 +1701,6 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
               {state.fx
                 ? `${state.fx.source} · ${new Date(state.fx.fetchedAt).toLocaleTimeString()}`
                 : 'Rates unavailable'}
-              . Rates refresh every minute; saved conversions stay fixed.
             </Text>
             {!!fx.error && (
               <Text accessibilityRole="alert" style={st.error}>
@@ -1635,14 +1718,8 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
                 ? `Available · ${deviceAi.model || 'On-device AI'}`
                 : deviceAi.reason}
             </Text>
-            <Text style={u.body}>
-              Categorizes entries and receipts after OCR. Chat stays on-device.
-            </Text>
             {deviceAi.provider === 'downloaded' && (
               <>
-                <Text style={u.body}>
-                  Local model · 484 MB · Free · Works offline after download
-                </Text>
                 {deviceAi.download === 'downloading' || deviceAi.download === 'verifying' ? (
                   <Button
                     secondary
@@ -1658,43 +1735,31 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
                     Download now · 484 MB
                   </Button>
                 ) : null}
-                <Text style={u.body}>
-                  Downloads automatically on Wi-Fi. Download now also allows mobile data. Model:
-                  Qwen3 0.6B · Apache 2.0.
-                </Text>
+                <Text style={u.body}>Auto-download on Wi-Fi. Download now allows mobile data.</Text>
               </>
             )}
           </Card>
-          <Card>
-            <Text style={u.h2}>Account</Text>
-            {onSignIn ? (
-              <>
-                <Text style={u.body}>Local budget · no account required</Text>
-                {authConfigured && (
-                  <Button
-                    secondary
-                    onPress={() =>
-                      void queue.current.finally(onSignIn).catch((e) => setNotice(errorText(e)))
-                    }
-                  >
-                    Sign in to an existing budget
-                  </Button>
-                )}
-              </>
-            ) : (
-              <Button
-                secondary
-                onPress={() =>
-                  void queue.current.finally(() => signOut()).catch((e) => setNotice(errorText(e)))
-                }
-              >
-                Sign out
-              </Button>
-            )}
-          </Card>
+          {budgets.length > 1 && (
+            <Card>
+              <Text style={u.h2}>Saved budget</Text>
+              {budgets.map((item) => (
+                <Button
+                  key={item.key}
+                  secondary
+                  disabled={item.key === budget.key}
+                  onPress={() =>
+                    void queue.current
+                      .then(() => onSelect(item))
+                      .catch((e) => setNotice(errorText(e)))
+                  }
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </Card>
+          )}
           <Card>
             <Text style={u.h2}>Local data</Text>
-            <Text style={u.body}>Budgets are stored on this device.</Text>
             {!!storageError && (
               <Button secondary onPress={() => update((old) => ({ ...old }))}>
                 Retry saving local data
@@ -1710,13 +1775,13 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
                   action: () => {
                     void queue.current
                       .catch(() => {})
-                      .then(() => {
+                      .then(async () => {
+                        await clearNativeCaptures(budget.key);
                         receipts.clear(true);
                         setReceiptUndo(null);
                         setS(
                           migratePlans({
                             ...initialState,
-                            apiUrl: state.apiUrl,
                             aiMode: state.aiMode,
                           }),
                         );
@@ -1833,7 +1898,9 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
                 }}
               >
                 <PageContext.Provider value={renderPage}>
-                  <Slot />
+                  <CaptureContext.Provider value={receivePurchase}>
+                    <Slot />
+                  </CaptureContext.Provider>
                 </PageContext.Provider>
               </View>
             </View>
@@ -1853,7 +1920,9 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
             >
               <View style={{ maxWidth: 1100, minWidth: 0, width: '100%', alignSelf: 'center' }}>
                 <PageContext.Provider value={renderPage}>
-                  <Slot />
+                  <CaptureContext.Provider value={receivePurchase}>
+                    <Slot />
+                  </CaptureContext.Provider>
                 </PageContext.Provider>
               </View>
             </ScrollView>
@@ -2040,7 +2109,9 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
                       setForm({
                         ...form,
                         title,
-                        ...(!form.categoryEdited ? { category: 'Other' } : {}),
+                        ...(!form.categoryEdited
+                          ? { category: categories.includes('Other') ? 'Other' : categories[0] }
+                          : {}),
                       })
                     }
                     placeholder={form.type === 'entry' ? 'Optional' : 'Name'}
@@ -2120,20 +2191,19 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
                     <Select
                       label="Category"
                       value={form.category}
-                      options={categories.map((value) => ({ value, label: value }))}
+                      options={[
+                        ...new Set([
+                          ...categories,
+                          ...(form.existing && form.category ? [form.category] : []),
+                        ]),
+                      ].map((value) => ({ value, label: value }))}
                       onChange={(category) => setForm({ ...form, category, categoryEdited: true })}
                     />
                   )}
                   {form.type === 'entry' &&
                     form.kind === 'expense' &&
                     entryClassification?.status === 'working' && (
-                      <Text style={u.body}>Categorizing on-device…</Text>
-                    )}
-                  {form.type === 'entry' &&
-                    form.kind === 'expense' &&
-                    entryClassification &&
-                    ['unavailable', 'needs-input'].includes(entryClassification.status) && (
-                      <Text style={u.body}>Choose a category manually.</Text>
+                      <Text style={u.body}>Categorizing…</Text>
                     )}
                   {form.type === 'entry' && form.kind === 'saving' && (
                     <Select
@@ -2236,28 +2306,35 @@ function AppContent({ session, onSignIn }: { session: Session; onSignIn?: () => 
     </SafeAreaView>
   );
 }
-const localSession: Session = {
-  uid: 'local-budget',
-  email: '',
-  idToken: '',
-  refreshToken: '',
-  expiresAt: Number.MAX_SAFE_INTEGER,
-};
 export default function App() {
-  const auth = useAuth();
-  const [showAuth, setShowAuth] = useState(false);
+  const [data, setData] = useState<{ budgets: SavedBudget[]; selected: SavedBudget } | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    savedBudgets()
+      .then(setData)
+      .catch((e) => setError(errorText(e)));
+  }, []);
   return (
     <SafeAreaProvider>
-      {auth.loading ? (
-        <View style={{ flex: 1, justifyContent: 'center' }}>
+      {error ? (
+        <View style={st.loading}>
+          <Text>Your local data is preserved</Text>
+          <Text>{error}</Text>
+        </View>
+      ) : data ? (
+        <AppContent
+          key={data.selected.key}
+          budget={data.selected}
+          budgets={data.budgets}
+          onSelect={async (selected) => {
+            await selectBudget(selected);
+            setData({ ...data, selected });
+          }}
+        />
+      ) : (
+        <View style={st.loading}>
           <ActivityIndicator />
         </View>
-      ) : auth.session ? (
-        <AppContent key={auth.session.uid} session={auth.session} />
-      ) : showAuth ? (
-        <AuthScreen onUseLocal={() => setShowAuth(false)} />
-      ) : (
-        <AppContent key="local-budget" session={localSession} onSignIn={() => setShowAuth(true)} />
       )}
     </SafeAreaProvider>
   );

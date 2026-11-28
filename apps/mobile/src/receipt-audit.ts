@@ -2,7 +2,8 @@ import type { ScanResult } from './api';
 import type { RecognizedReceipt } from './receipt-text';
 import { parseReceiptText } from './receipt-text';
 import { expenseCategories, type ReceiptClassification } from './classification';
-export type ReceiptAudit = ReceiptClassification;
+import type { ReceiptExtraction } from './receipt-extraction';
+export type ReceiptAudit = ReceiptClassification & { extraction?: ReceiptExtraction };
 export const receiptCategories = [...expenseCategories];
 // OCR confidence and financial validation are ordinary code, not an AI fallback.
 export function clearDeviceReceipt(document: RecognizedReceipt, draft: ScanResult): boolean {

@@ -1,0 +1,19 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.pocketreceiptocr'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.pocketreceiptocr'
+  defaultConfig { minSdkVersion 26 }
+}
+
+dependencies {
+  // Bundled Latin model: no Play Services model download at first use.
+  implementation 'com.google.mlkit:text-recognition:16.0.1'
+  implementation 'androidx.exifinterface:exifinterface:1.4.2'
+  testImplementation 'junit:junit:4.13.2'
+}

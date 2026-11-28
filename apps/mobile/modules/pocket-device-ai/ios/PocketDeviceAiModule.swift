@@ -4,6 +4,9 @@ import Foundation
 public final class PocketDeviceAiModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PocketDeviceAi")
+    AsyncFunction("generate") { (payload: String) async throws -> String in
+      try await DeviceAiEngine.generate(payload: payload)
+    }
     AsyncFunction("verifyModel") { (uri: String, bytes: Int64, sha256: String) throws -> Bool in
       guard let url = URL(string: uri), url.isFileURL,
         let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,

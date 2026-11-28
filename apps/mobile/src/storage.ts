@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { validatedApiUrl } from './lib/config';
 import { State, initialState } from './finance';
 import { migratePlans } from './plans';
 const storageKey = (uid: string, local = false) =>
@@ -16,13 +15,9 @@ export async function load(uid: string, local = false): Promise<State> {
     !Array.isArray(data.goals) ||
     !Array.isArray(data.bills)
   )
-    throw new Error('Local account data is invalid.');
-  const { model: legacyModel, ...account } = data;
-  let apiUrl = initialState.apiUrl;
-  try {
-    apiUrl = validatedApiUrl(account.apiUrl);
-  } catch {}
-  return migratePlans({ ...initialState, ...account, apiUrl });
+    throw new Error('Saved budget data is invalid.');
+  const { model: legacyModel, apiUrl: legacyApiUrl, ...account } = data;
+  return migratePlans({ ...initialState, ...account });
 }
 export const persist = (s: State, uid: string, local = false) =>
   AsyncStorage.setItem(storageKey(uid, local), JSON.stringify(s));

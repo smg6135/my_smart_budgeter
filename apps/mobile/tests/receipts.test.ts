@@ -97,7 +97,15 @@ test('automatic import skips uncertainty and invalid fields, and deduplicates ex
     initialState,
     true,
   );
-  assert.deepEqual(batch.saved, ['r', 'separate-photo']);
+  assert.deepEqual(batch.saved, ['r']);
+  assert.match(batch.errors['separate-photo'], /Possible existing purchase/);
+  // A different image with the same purchase fields is held, not silently discarded.
+  // A user can explicitly confirm it is a separate purchase.
+  assert.equal(
+    prepareReceiptImport([samePurchase], { ...initialState, entries: batch.entries }).entries
+      .length,
+    1,
+  );
   assert.deepEqual(batch.duplicates, ['duplicate']);
   assert.match(batch.errors.invalid, /date/);
   assert.equal(batch.errors.uncertain, undefined);

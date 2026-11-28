@@ -14,7 +14,7 @@ test('all screens fit narrow widths with long labels and large amounts', async (
     'A long-awaited family holiday with a deliberately descriptive savings goal name';
   sample.goals[0].target = 12345678900;
   await page.addInitScript(
-    (state) => localStorage.setItem('pocket-budget.v2.test-user', JSON.stringify(state)),
+    (state) => localStorage.setItem('pocket-budget.local.v1', JSON.stringify(state)),
     sample,
   );
   await page.route('**/v2/exchange-rates?**', (route) =>
@@ -60,7 +60,7 @@ test('larger text reflows without colliding at phone width', async ({ page }) =>
   await page.setViewportSize({ width: 390, height: 900 });
   const sample = demoState();
   await page.addInitScript(
-    (state) => localStorage.setItem('pocket-budget.v2.test-user', JSON.stringify(state)),
+    (state) => localStorage.setItem('pocket-budget.local.v1', JSON.stringify(state)),
     sample,
   );
   await page.route('**/v2/exchange-rates?**', (route) =>

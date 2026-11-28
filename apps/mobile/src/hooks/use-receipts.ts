@@ -6,7 +6,9 @@ import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
 import { id, State } from '../finance';
 import { recognizeReceipt, deviceOcrAvailable } from '../lib/native-receipt-ocr';
+import { activeCategories } from '../classification';
 import { classifyReceipt } from '../lib/device-ai';
+import { receiptForeground } from '../lib/receipt-foreground';
 import { processReceipt } from '../receipt-processor';
 import {
   ReceiptFile,
@@ -18,6 +20,7 @@ import {
   RECEIPT_MIME_TYPES,
   receiptMime,
   runReceiptQueue,
+  receiptFingerprints,
 } from '../receipts';
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Receipt failed. Retry.');
 async function fileData(file: ReceiptFile) {
@@ -36,6 +39,13 @@ async function fileData(file: ReceiptFile) {
   const fileOnDevice = new File(file.uri);
   if (fileOnDevice.size > RECEIPT_MAX_BYTES) throw new Error('File exceeds 8 MB.');
   return fileOnDevice.base64();
+}
+async function receiptFingerprint(file: ReceiptFile) {
+  const data = await fileData(file);
+  // Preserve existing fingerprints; insecure LAN browsers can still scan.
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, data)
+    .then((value) => 'b64sha256:' + value)
+    .catch(() => undefined);
 }
 export function useReceipts(
   state: State | null,
@@ -56,11 +66,13 @@ export function useReceipts(
   const active = useRef(false),
     mounted = useRef(true),
     generation = useRef(0),
-    picking = useRef(false);
+    picking = useRef(false),
+    cancellation = useRef<AbortController | null>(null);
   useEffect(() => {
     mounted.current = true;
     const lifecycle = generation;
     return () => {
+      cancellation.current?.abort();
       mounted.current = false;
       lifecycle.current++;
     };
@@ -78,12 +90,15 @@ export function useReceipts(
       targetIds = new Set(targets.map((j) => j.id));
     const seen = new Set(
       [
-        ...stateRef.current.entries.map((entry) => entry.receiptFingerprint),
+        ...stateRef.current.entries.flatMap(receiptFingerprints),
         ...jobsRef.current
           .filter((j) => !targetIds.has(j.id) && j.status !== 'duplicate')
           .map((j) => j.fingerprint),
       ].filter(Boolean),
     );
+    const controller = new AbortController();
+    cancellation.current = controller;
+    const foreground = () => receiptForeground(controller.signal);
     active.current = true;
     setProcessing(true);
     try {
@@ -93,14 +108,9 @@ export function useReceipts(
           if (!mounted.current || generation.current !== epoch) return;
           patch(job.id, { status: 'processing', error: undefined, reviewError: undefined });
           try {
-            const data = await fileData(job);
-            // Secure contexts/native support hashing. An insecure LAN browser can still scan.
-            const fingerprint = await Crypto.digestStringAsync(
-              Crypto.CryptoDigestAlgorithm.SHA256,
-              data,
-            )
-              .then((value) => 'b64sha256:' + value)
-              .catch(() => undefined);
+            await foreground();
+            // Keep the base64 buffer out of the OCR/model async frame.
+            const fingerprint = await receiptFingerprint(job);
             if (!mounted.current || generation.current !== epoch) return;
             if (fingerprint && seen.has(fingerprint)) {
               patch(job.id, { status: 'duplicate', fingerprint });
@@ -108,8 +118,17 @@ export function useReceipts(
             }
             if (fingerprint) seen.add(fingerprint);
             const output = await processReceipt(job, {
-              recognize: recognizeReceipt,
-              classify: classifyReceipt,
+              recognize: async (uri) => {
+                await foreground();
+                patch(job.id, { stage: 'ocr' });
+                return recognizeReceipt(uri);
+              },
+              classify: async (document, draft) => {
+                await foreground();
+                return classifyReceipt(document, draft, activeCategories(stateRef.current!), (stage) => {
+                  if (mounted.current && generation.current === epoch) patch(job.id, { stage });
+                });
+              },
             });
             if (mounted.current && generation.current === epoch)
               patch(job.id, {
@@ -130,6 +149,8 @@ export function useReceipts(
         1,
       );
       if (mounted.current && generation.current === epoch) {
+        await foreground();
+        if (!mounted.current || generation.current !== epoch) return;
         completedRef.current(jobsRef.current.filter((j) => targetIds.has(j.id)));
         setCompletedBatch((old) => old + 1);
       }
@@ -209,7 +230,7 @@ export function useReceipts(
   }
   return {
     jobs,
-    deviceOcr: Platform.OS === 'ios',
+    deviceOcr: Platform.OS === 'ios' || Platform.OS === 'android',
     deviceOcrAvailable,
     processing,
     completedBatch,
@@ -254,6 +275,7 @@ export function useReceipts(
     },
     clear: (force = false) => {
       if (!active.current || force) {
+        cancellation.current?.abort();
         generation.current++;
         active.current = false;
         setProcessing(false);

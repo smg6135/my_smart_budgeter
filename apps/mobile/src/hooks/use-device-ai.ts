@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { deviceAiAvailability, subscribeDeviceAi, suspendDeviceAi } from '../lib/device-ai';
+import { deviceAiAvailability, subscribeDeviceAi } from '../lib/device-ai';
 import type { DeviceAiAvailability } from '../classification';
 export function useDeviceAi() {
   const [availability, setAvailability] = useState<DeviceAiAvailability>({
@@ -27,7 +27,6 @@ export function useDeviceAi() {
     }, 15000);
     const listener = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh();
-      else suspendDeviceAi();
     });
     const unsubscribe = subscribeDeviceAi(refresh);
     return () => {

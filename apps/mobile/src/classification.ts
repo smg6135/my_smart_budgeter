@@ -7,7 +7,19 @@ export const expenseCategories = [
   'Entertainment',
   'Other',
 ] as const;
-export type ExpenseCategory = (typeof expenseCategories)[number];
+export type ExpenseCategory = string;
+export function activeCategories(state: { expenseCategories?: string[] }): string[] {
+  return state.expenseCategories || [...expenseCategories];
+}
+export function validateCategories(values: string[]): string[] {
+  if (!values.length || values.length > 24) throw new Error('Keep between 1 and 24 categories.');
+  const normalized = values.map((v) => v.normalize('NFKC').trim());
+  if (normalized.some((v) => !v || v.length > 32 || /[\u0000-\u001f]/.test(v)))
+    throw new Error('Use category names between 1 and 32 characters.');
+  if (new Set(normalized.map((v) => v.toLocaleLowerCase('en'))).size !== normalized.length)
+    throw new Error('That category already exists.');
+  return normalized;
+}
 export type DeviceAiAvailability = {
   available: boolean;
   reason?: string;
@@ -20,8 +32,11 @@ export type Classification =
   | { status: 'classified'; category: ExpenseCategory; reason?: string }
   | { status: 'needs-input' | 'unavailable'; reason: string };
 export type ReceiptClassification = Classification & { approved?: boolean };
-export function isExpenseCategory(value: unknown): value is ExpenseCategory {
-  return typeof value === 'string' && (expenseCategories as readonly string[]).includes(value);
+export function isExpenseCategory(
+  value: unknown,
+  categories: readonly string[] = expenseCategories,
+): value is ExpenseCategory {
+  return typeof value === 'string' && categories.includes(value);
 }
 // Invalid model output is never replaced with a keyword/category heuristic.
 export function validateClassification(value: unknown): Classification {

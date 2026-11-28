@@ -26,7 +26,7 @@ test('manual category selection works when the device model is unavailable', asy
   await page.getByRole('button', { name: 'Save entry' }).click();
   await expect(page.getByRole('button', { name: 'Edit Cinema tickets' })).toBeVisible();
   const entry = await page.evaluate(
-    () => JSON.parse(localStorage.getItem('pocket-budget.v2.test-user')!).entries[0],
+    () => JSON.parse(localStorage.getItem('pocket-budget.local.v1')!).entries[0],
   );
   expect(entry.category).toBe('Entertainment');
   expect(entry.amount).toBe(2400);

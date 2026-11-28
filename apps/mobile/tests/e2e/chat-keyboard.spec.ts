@@ -45,7 +45,7 @@ test('chat composer stays visible while the viewport shrinks and history scrolls
       `Message ${index + 1}: ` + 'A long conversation about a budget and savings. '.repeat(8),
   }));
   await page.addInitScript(
-    (state) => localStorage.setItem('pocket-budget.v2.test-user', JSON.stringify(state)),
+    (state) => localStorage.setItem('pocket-budget.local.v1', JSON.stringify(state)),
     sample,
   );
   await page.setViewportSize({ width: 390, height: 844 });

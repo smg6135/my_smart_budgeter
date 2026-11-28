@@ -134,6 +134,8 @@ test-results/
 !package-lock.json
 
 # Tooling and cloud state
+# Local device crash reports contain device and installation identifiers.
+*.ips
 .tools/
 .terraform/
 *.tfstate*

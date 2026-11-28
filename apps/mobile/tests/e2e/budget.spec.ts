@@ -95,19 +95,13 @@ test('validates money input and gates AI by device capability without cloud call
 test('on-device AI has no cloud mode or price research control', async ({ page }) => {
   await page.goto('/settings');
   await expect(page.getByText('On-device AI', { exact: true })).toBeVisible();
-  await expect(
-    page.getByText(
-      'Categorizes entries and receipts after OCR. Chat stays on-device.',
-    ),
-  ).toBeVisible();
+  await expect(page.getByText('AI unavailable on this device.', { exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: /AI mode/ })).toHaveCount(0);
   await expect(page.getByLabel('Research prices on the web')).toHaveCount(0);
 });
 test('unsupported browser scanning has no paid receipt upload fallback', async ({ page }) => {
   await page.goto('/tools');
-  await expect(
-    page.getByText('On-device scanning is available in the iOS app. Add entries manually here.'),
-  ).toBeVisible();
+  await expect(page.getByText('Scan receipts in the mobile app.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Upload receipts' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Try cloud analysis' })).toHaveCount(0);
 });

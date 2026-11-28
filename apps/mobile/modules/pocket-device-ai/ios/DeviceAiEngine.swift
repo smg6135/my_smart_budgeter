@@ -140,6 +140,26 @@ enum DeviceAiEngine {
     throw DeviceAiError.unavailable
   }
 
+  @MainActor
+  static func generate(payload: String) async throws -> String {
+    #if canImport(FoundationModels)
+    if #available(iOS 26.0, *), availability()["available"] as? Bool == true {
+      guard payload.utf8.count <= 18000,
+        let data = payload.data(using: .utf8),
+        let input = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let instructions = input["instructions"] as? String,
+        let messages = input["messages"] as? [[String: Any]] else { throw DeviceAiError.messageTooLong }
+      let session = LanguageModelSession(instructions: instructions)
+      var request: [String: Any] = ["messages": messages]
+      if let schema = input["responseSchema"] { request["responseSchema"] = schema }
+      let prompt = String(decoding: try JSONSerialization.data(withJSONObject: request), as: UTF8.self)
+      let response = try await session.respond(to: prompt, options: GenerationOptions(temperature: 0))
+      return String(response.content.prefix(6000))
+    }
+    #endif
+    throw DeviceAiError.unavailable
+  }
+
 }
 
 

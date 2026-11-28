@@ -1,3 +1,5 @@
+> Historical record. The 2026-11-22 local-only implementation and cloud retirement supersede backend, authentication and deployment requirements below. Read [the current handoff](HANDOFF.md) for current behavior.
+
 # Current release: free on-device classification
 
 Build **1.0.0 (12)** is uploaded to TestFlight with the downloaded fallback. Native entry classification works; uncertain receipts remain in one correction screen. Native CI is manual to conserve quota. [Verification and limitations](LOCAL_AI.md).

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "main": "index.ts",
-  "description": "On-device receipt text recognition with Apple Vision",
+  "description": "On-device receipt text recognition with Apple Vision and bundled ML Kit",
   "license": "MIT",
   "author": "Pocket Budget"
 }

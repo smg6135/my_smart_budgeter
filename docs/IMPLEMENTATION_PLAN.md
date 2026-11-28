@@ -1,3 +1,5 @@
+> Historical record. The 2026-11-22 local-only implementation and cloud retirement supersede backend, authentication and deployment requirements below. Read [the current handoff](HANDOFF.md) for current behavior.
+
 # Current implementation: free, on-device AI
 
 Latest: downloaded local-model fallback is implemented and **build 1.0.0 (12)** is uploaded to TestFlight. 67 local unit tests and lint/typecheck pass; 78 browser checks pass. Android native compilation passes. Native iOS downloads/verification and three entry classifications were exercised; the receipt fixture requested manual review. No additional native builds are scheduled; native workflows are manual to conserve quota. [Details and limitations](LOCAL_AI.md).

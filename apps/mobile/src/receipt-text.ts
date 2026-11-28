@@ -8,7 +8,7 @@ export type RecognizedLine = {
   bounds: { x: number; y: number; width: number; height: number };
 };
 export type RecognizedReceipt = {
-  engine: 'apple-vision';
+  engine: 'apple-vision' | 'mlkit';
   width: number;
   height: number;
   lines: RecognizedLine[];

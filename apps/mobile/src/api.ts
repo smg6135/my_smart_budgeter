@@ -12,6 +12,8 @@ export type ChatResult = {
   sources: { title: string; url: string }[];
 };
 export type ScanResult = {
+  title?: string;
+  detail?: string;
   merchant: string;
   amount: number;
   currency: string;

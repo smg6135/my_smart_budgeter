@@ -43,6 +43,25 @@ test('device receipt parsing extracts the printed merchant, final total, date an
     notes: '',
   });
 });
+
+test('ML Kit receipts use the same financial parser and confidence guards', async () => {
+  const android: RecognizedReceipt = { ...sample, engine: 'mlkit' };
+  assert.deepEqual(parseReceiptText(android, now), parseReceiptText(sample, now));
+  assert.equal(clearDeviceReceipt(android, parseReceiptText(android, now)), true);
+  const uncertain: RecognizedReceipt = {
+    ...android,
+    lines: android.lines.map((line) => ({ ...line, confidence: 0.7 })),
+  };
+  const output = await processReceipt(file, {
+    recognize: async () => uncertain,
+    classify: async () => ({ status: 'classified', category: 'Food & drinks', approved: true }),
+  });
+  assert.equal(output.result.amount, 5);
+  assert.equal(output.needsReview, true);
+  const unknown = { ...android, lines: android.lines.map((line) => ({ ...line, confidence: 0 })) };
+  assert.equal(clearDeviceReceipt(unknown, parseReceiptText(android, now)), false);
+  assert.equal(parseReceiptText(unknown, now).amount, 0);
+});
 test('tax, subtotal, tips, cash tender and change do not replace the final total', () => {
   const parsed = parseReceiptText(
     document(

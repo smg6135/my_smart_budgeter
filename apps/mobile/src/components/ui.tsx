@@ -173,7 +173,7 @@ export function Empty({
   onPress,
 }: {
   title: string;
-  body: string;
+  body?: string;
   action?: string;
   onPress?: () => void;
 }) {
@@ -191,9 +191,11 @@ export function Empty({
       >
         {title}
       </Text>
-      <Text style={{ color: C.muted, lineHeight: 21, textAlign: 'center', maxWidth: 340 }}>
-        {body}
-      </Text>
+      {!!body && (
+        <Text style={{ color: C.muted, lineHeight: 21, textAlign: 'center', maxWidth: 340 }}>
+          {body}
+        </Text>
+      )}
       {action && onPress && (
         <Button small secondary onPress={onPress}>
           {action}

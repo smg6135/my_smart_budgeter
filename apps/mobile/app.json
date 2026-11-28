@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pocket Budget",
     "slug": "pocket-budget",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -10,11 +10,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mingonsong.pocketbudget",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "NSLocalNetworkUsageDescription": "Connect to your local Pocket backend while testing on your Wi-Fi network.",
-        "NSAppTransportSecurity": {
-          "NSAllowsLocalNetworking": true
-        }
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -31,7 +27,12 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-secure-store", { "configureAndroidBackup": false }],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": false
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -43,7 +44,11 @@
       "expo-font",
       [
         "llama.rn",
-        { "enableEntitlements": false, "forceCxx20": true, "enableOpenCLAndHexagon": false }
+        {
+          "enableEntitlements": false,
+          "forceCxx20": true,
+          "enableOpenCLAndHexagon": false
+        }
       ],
       [
         "expo-build-properties",

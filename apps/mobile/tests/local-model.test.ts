@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { LocalModelStore, type ModelSpec, type ModelStorage } from '../src/local-model-store';
 import {
   categoryMessages,
+  receiptCategoryText,
+  receiptCategoryMessages,
   categorySchema,
   readCategory,
   receiptReviewMessages,
@@ -271,4 +273,30 @@ test('receipt review independently reads OCR, never sees the draft and cannot ap
   });
   assert.equal(messages[1].content, 'TOTAL SGD 12.50');
   assert(!JSON.stringify(messages).includes('draft'));
+});
+
+test('receipt classification budgets context for merchant/items without category rules', () => {
+  const document = {
+    engine: 'apple-vision' as const,
+    width: 420,
+    height: 500,
+    lines: [
+      'Corner shop',
+      ...Array(100).fill('2026/11/22'),
+      'TOTAL USD 5.00',
+      '\uc6b0\uc720 milk 3.00',
+      'Bread 2.00',
+      'Change 0.00',
+      'TOTAL \u20ac 5.00',
+    ].map((text) => ({
+      text,
+      confidence: 1,
+      bounds: { x: 0, y: 0, width: 1, height: 0.1 },
+    })),
+  };
+  assert.equal(receiptCategoryText(document), 'Corner shop\n\uc6b0\uc720 milk 3.00\nBread 2.00');
+  assert.equal(receiptCategoryMessages(document).at(-1)?.content, receiptCategoryText(document));
+  // Review must independently read the original financial evidence.
+  assert.match(receiptReviewMessages(document).at(-1)!.content, /TOTAL USD 5.00/);
+  assert.equal(readCategory('{"category":"unclear"}').status, 'needs-input');
 });

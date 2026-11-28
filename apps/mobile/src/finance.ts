@@ -1,7 +1,9 @@
-import { defaultApiUrl } from './lib/config';
 import { FxSnapshot, OriginalAmount, parseAmount, formatMoney } from './currency';
+import type { CaptureEvidence, CaptureRecord, CaptureSettings } from './transaction-capture';
 export type Kind = 'expense' | 'income' | 'saving';
 export type Entry = {
+  detail?: string;
+  receiptMerchant?: string;
   id: string;
   kind: Kind;
   amount: number;
@@ -12,6 +14,8 @@ export type Entry = {
   billId?: string;
   original?: OriginalAmount;
   receiptFingerprint?: string;
+  receiptFingerprints?: string[];
+  capture?: CaptureEvidence;
 };
 export type Bill = { id: string; title: string; amount: number; recurring: boolean; date: string };
 export type Goal = {
@@ -34,6 +38,7 @@ export type BudgetPlan = {
 };
 export type PlanPeriod = { from: string; plan: BudgetPlan | null };
 export type State = {
+  expenseCategories?: string[];
   version: 1;
   currency: string;
   displayCurrency?: string;
@@ -44,12 +49,13 @@ export type State = {
   entries: Entry[];
   goals: Goal[];
   messages: Message[];
-  apiUrl: string;
   aiMode?: 'planning' | 'conversation';
   research: boolean;
   preferredCurrencies?: string[];
   plans?: BudgetPlan[];
   planHistory?: PlanPeriod[];
+  captures?: CaptureRecord[];
+  captureSettings?: CaptureSettings;
 };
 export const today = () => {
   const d = new Date();
@@ -65,7 +71,6 @@ export const initialState: State = {
   entries: [],
   goals: [],
   messages: [],
-  apiUrl: defaultApiUrl,
   research: true,
 };
 export const cents = (value: string) => parseAmount(value);

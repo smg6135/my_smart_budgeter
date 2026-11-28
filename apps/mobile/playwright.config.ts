@@ -17,11 +17,6 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npx expo start --web --port ' + port,
-    env: {
-      EXPO_PUBLIC_FIREBASE_PROJECT_ID: 'demo-pocket',
-      EXPO_PUBLIC_FIREBASE_API_KEY: 'fake-emulator-api-key',
-      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 'test-oauth-client.apps.googleusercontent.com',
-    },
     url: 'http://localhost:' + port,
     reuseExistingServer: !process.env.CI,
     timeout: 180000,

@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <queries>
+    <package android:name="com.dbs.sg.dbsmbanking" />
+    <package android:name="com.dbs.sg.posbmbanking" />
+    <package android:name="com.americanexpress.android.acctsvcs.sg" />
+    <package android:name="com.americanexpress.android.acctsvcs.us" />
+    <package android:name="com.google.android.apps.walletnfcrel" />
+  </queries>
+  <application>
+    <service android:name=".FinancialNotificationListener" android:label="Pocket Budget purchase alerts"
+      android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+    </service>
+  </application>
+</manifest>

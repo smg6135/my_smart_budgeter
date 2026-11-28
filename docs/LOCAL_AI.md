@@ -1,5 +1,9 @@
 # Downloadable local AI
 
+**November 29 source revision (not in build 14):** receipt inference now extracts a structured title, quick detail and financial proposal from OCR first, then makes a separate stateless categorization request using only title/detail and Settings categories. `src/receipt-extraction.ts` owns the two-call pipeline; `src/lib/device-ai.native.ts` executes each request through the shared serialized runtime. A fresh prompt does not mean a second concurrent model instance. The old post-category financial-reading call is replaced by extraction-first inference, with independent ordinary-code OCR agreement before auto-add. Title/detail are retained for manual review if categorization fails, and saved listings preserve printed merchant identity for deduplication. Unknown or mismatched financial facts still require correction.
+
+Version 1.0.1 adds a per-budget category list in Settings. Defaults become editable bubbles: add a name or remove it with × (1–24 names, up to 32 characters each). OCR produces text; system AI or Qwen classifies merchant/items using only the active category IDs. Removed names remain on historical transactions, and unknown/unclear output requires manual selection. Category names are untrusted data, never instructions. New receipt/capture writes validate against the current list, and changing the list invalidates pending typed suggestions. Independent financial review and confidence/FX checks remain mandatory. The original benchmark below predates this configurable prompt and does not measure this release's accuracy.
+
 The app prefers available **Apple Foundation Models** (iOS) or **Gemini Nano/AICore** (Android). When system AI is unavailable, it installs **Qwen3 0.6B Q4_K_M** inside the running app. No app restart, model account, key, subscription or inference server is needed.
 
 ## Model choice
@@ -26,7 +30,7 @@ Google's Gemini Nano is a system-managed model with device availability checks, 
 
 Receipts uploaded during installation wait for that download. Missing network/space, paused installation, invalid output or an inference failure leave manual controls available. The tiny model's initial approve/reject response was unreliable in testing, so it is not used. Instead it independently reads merchant/total/currency/date from OCR text without seeing the parsed draft; code requires exact matching fields. No model-supplied financial field is saved. A successful category and matching review never bypass existing amount/date/currency/confidence validation. There is no cloud inference or keyword classifier fallback.
 
-The **first** model installation requires internet. Afterward it works in airplane mode. A new native app build is needed once for this runtime; Expo Go and the previous TestFlight binary cannot load it. Android supports arm64 devices/x86_64 emulators; Android receipt OCR is still separate outstanding work. Browser budgeting stays manual.
+The **first** model installation requires internet. Afterward it works in airplane mode. A native app build containing the runtime is required; Expo Go cannot load it. Android supports arm64 devices/x86_64 emulators. Android OCR now has a separate bundled ML Kit implementation, with native compilation and physical-device acceptance pending. Browser budgeting stays manual.
 
 ## Test
 
@@ -40,7 +44,7 @@ Sources: [Google Nano setup/availability](https://developers.google.com/ml-kit/g
 
 ## Verification and build quota
 
-67 local unit tests, lint/typecheck and 78 browser checks pass. [Android native compilation](https://github.com/smg6135/my_smart_budgeter/actions/runs/44898067281) passes. The iOS simulator downloaded/verified the real weights and correctly classified taxi fare, dentist appointment and movie tickets. The receipt fixture returned `unclear` and was held for manual review, without automatic approval. The original smoke test expected that specific receipt to be approved and failed; its source assertion now accepts this intended conservative outcome. That assertion update has not been rerun remotely.
+Historical validation before the 2026-11-22 cleanup: 67 local unit tests, lint/typecheck and 78 browser checks passed. [Android native compilation](https://github.com/smg6135/my_smart_budgeter/actions/runs/44898067281) passed. The iOS simulator downloaded/verified the real weights and correctly classified taxi fare, dentist appointment and movie tickets. The receipt fixture returned `unclear` and was held for manual review, without automatic approval. The original smoke test expected that specific receipt to be approved and failed; its source assertion now accepts this intended conservative outcome. That assertion update has not been rerun remotely. Current crash-fix, Android OCR and local-only verification is recorded in [the handoff](HANDOFF.md); historical native artifacts do not prove the changed native dependencies compile.
 
 Runtime is pinned to llama.rn 0.13.0-rc.12 for React Native 0.88 compatibility. Qwen thinking is explicitly disabled; the adapter uses parsed answer content and handles the native ChatML assistant envelope. Native runtime/phone performance and uncertain receipt handling still need physical-device checks.
 

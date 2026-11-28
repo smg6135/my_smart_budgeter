@@ -56,7 +56,7 @@ test('books original currency once, converts reports, and preserves expense audi
   await page.getByLabel('Name', { exact: true }).fill('Dinner with friends');
   await page.getByRole('button', { name: 'Save entry' }).click();
   const state = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('pocket-budget.v2.test-user')!),
+    JSON.parse(localStorage.getItem('pocket-budget.local.v1')!),
   );
   expect(state.currency).toBe('SGD');
   expect(state.displayCurrency).toBe('USD');
@@ -115,12 +115,12 @@ test('sample budget keeps loaded rates and later quotes never rewrite saved expe
   await expect
     .poll(() =>
       page.evaluate(
-        () => JSON.parse(localStorage.getItem('pocket-budget.v2.test-user')!).fx?.rates.USD,
+        () => JSON.parse(localStorage.getItem('pocket-budget.local.v1')!).fx?.rates.USD,
       ),
     )
     .toBe(0.5);
   const state = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('pocket-budget.v2.test-user')!),
+    JSON.parse(localStorage.getItem('pocket-budget.local.v1')!),
   );
   expect(state.entries[0].amount).toBe(10000);
   expect(state.entries[0].original.amount).toBe(7500);

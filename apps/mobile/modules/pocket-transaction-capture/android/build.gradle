@@ -1,0 +1,14 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.pockettransactioncapture'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.pockettransactioncapture'
+  defaultConfig { minSdkVersion 26 }
+}
+
+dependencies { testImplementation 'junit:junit:4.13.2' }
